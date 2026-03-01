@@ -19,7 +19,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 
@@ -29,6 +29,33 @@ logger = logging.getLogger("0gmem-persistence")
 
 STATE_FILENAME = "memory_state.json"
 EMBEDDINGS_FILENAME = "memory_embeddings.npz"
+SCHEMA_VERSION = 1
+
+# Migration registry: version N -> function that upgrades state dict to version N+1.
+_MIGRATIONS: Dict[int, Callable[[dict], dict]] = {
+    # Example for future use:
+    # 1: _migrate_v1_to_v2,
+}
+
+
+def _migrate(state: dict, from_version: int) -> Optional[dict]:
+    """Run migration chain from from_version to SCHEMA_VERSION.
+
+    Returns the migrated state dict, or None if a migration step is missing.
+    """
+    current = from_version
+    while current < SCHEMA_VERSION:
+        fn = _MIGRATIONS.get(current)
+        if fn is None:
+            logger.warning(
+                f"No migration from v{current} to v{current + 1}. "
+                f"Starting with fresh memory state."
+            )
+            return None
+        state = fn(state)
+        current += 1
+        logger.info(f"Migrated state from v{current - 1} to v{current}")
+    return state
 
 
 class EmbeddingRegistry:
@@ -138,6 +165,7 @@ def save_memory_state(manager: MemoryManager, path: str | Path) -> Dict[str, Any
 
     # Serialize structure
     state = manager.to_dict()
+    state["schema_version"] = SCHEMA_VERSION
 
     # Collect and save embeddings
     registry = EmbeddingRegistry()
@@ -222,6 +250,24 @@ def load_memory_state(
         else:
             logger.info(f"No state file at {state_file}, returning None")
         return None
+
+    # --- Step 1b: Schema version check and migration ---
+    version = state.get("schema_version", 1)
+
+    if version > SCHEMA_VERSION:
+        logger.warning(
+            f"State file version {version} is newer than supported "
+            f"version {SCHEMA_VERSION}. Starting with fresh memory state."
+        )
+        return None
+
+    if version < SCHEMA_VERSION:
+        state = _migrate(state, version)
+        if state is None:
+            return None
+
+    # Remove schema_version before passing to from_dict
+    state.pop("schema_version", None)
 
     # --- Step 2: Load embeddings (independent, non-fatal) ---
     raw_embeddings = EmbeddingRegistry.load(path)

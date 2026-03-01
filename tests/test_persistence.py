@@ -1,5 +1,6 @@
 """Tests for persistence: save/load memory state to disk."""
 
+import json
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -402,3 +403,134 @@ class TestCorruptionRecovery:
         # rather than crashing — either outcome (None or empty manager) is acceptable
         result = load_memory_state(tmp_persist_dir, mock_embedding_fn)
         assert result is None or isinstance(result, MemoryManager)
+
+
+class TestSchemaVersioning:
+    """Tests for schema version field and migration infrastructure."""
+
+    def test_save_writes_schema_version(self, tmp_path, mock_embedding_fn):
+        """Saved JSON should contain schema_version field."""
+        from zerogmem.persistence import SCHEMA_VERSION
+
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        save_memory_state(mm, tmp_path)
+
+        with open(tmp_path / STATE_FILENAME) as f:
+            data = json.load(f)
+
+        assert "schema_version" in data
+        assert data["schema_version"] == SCHEMA_VERSION
+
+    def test_load_current_version(self, tmp_path, mock_embedding_fn):
+        """Normal round-trip with version field should work."""
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        mm.start_session()
+        mm.add_message("user", "Hello")
+        mm.end_session()
+
+        save_memory_state(mm, tmp_path)
+        restored = load_memory_state(tmp_path, mock_embedding_fn)
+
+        assert restored is not None
+        assert len(restored.graph.memories) == 1
+
+    def test_load_missing_version_treated_as_v1(self, tmp_path, mock_embedding_fn):
+        """Old saves without schema_version should load as v1."""
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        save_memory_state(mm, tmp_path)
+
+        # Strip the version field to simulate a pre-versioning save
+        state_file = tmp_path / STATE_FILENAME
+        with open(state_file) as f:
+            data = json.load(f)
+        del data["schema_version"]
+        with open(state_file, "w") as f:
+            json.dump(data, f)
+
+        restored = load_memory_state(tmp_path, mock_embedding_fn)
+        assert restored is not None
+
+    def test_load_future_version_returns_none(self, tmp_path, mock_embedding_fn):
+        """Version newer than supported should return None (fresh start)."""
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        save_memory_state(mm, tmp_path)
+
+        # Bump version to a future value
+        state_file = tmp_path / STATE_FILENAME
+        with open(state_file) as f:
+            data = json.load(f)
+        data["schema_version"] = 999
+        with open(state_file, "w") as f:
+            json.dump(data, f)
+
+        restored = load_memory_state(tmp_path, mock_embedding_fn)
+        assert restored is None
+
+    def test_migrate_chain_runs(self, tmp_path, mock_embedding_fn):
+        """Migration functions should be called when loading older versions."""
+        from zerogmem import persistence
+
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        save_memory_state(mm, tmp_path)
+
+        # Write a v1 state file
+        state_file = tmp_path / STATE_FILENAME
+        with open(state_file) as f:
+            data = json.load(f)
+        data["schema_version"] = 1
+        with open(state_file, "w") as f:
+            json.dump(data, f)
+
+        # Register a mock migration and bump SCHEMA_VERSION
+        migration_called = False
+        def mock_v1_to_v2(state):
+            nonlocal migration_called
+            migration_called = True
+            state["schema_version"] = 2
+            return state
+
+        old_version = persistence.SCHEMA_VERSION
+        old_migrations = persistence._MIGRATIONS.copy()
+        try:
+            persistence.SCHEMA_VERSION = 2
+            persistence._MIGRATIONS[1] = mock_v1_to_v2
+
+            restored = load_memory_state(tmp_path, mock_embedding_fn)
+            assert migration_called
+            assert restored is not None
+        finally:
+            persistence.SCHEMA_VERSION = old_version
+            persistence._MIGRATIONS.clear()
+            persistence._MIGRATIONS.update(old_migrations)
+
+    def test_migrate_missing_function_returns_none(self, tmp_path, mock_embedding_fn):
+        """Missing migration step should return None gracefully."""
+        from zerogmem import persistence
+
+        mm = MemoryManager()
+        mm.set_embedding_function(mock_embedding_fn)
+        save_memory_state(mm, tmp_path)
+
+        # Write a v1 state
+        state_file = tmp_path / STATE_FILENAME
+        with open(state_file) as f:
+            data = json.load(f)
+        data["schema_version"] = 1
+        with open(state_file, "w") as f:
+            json.dump(data, f)
+
+        # Bump SCHEMA_VERSION but don't register any migration
+        old_version = persistence.SCHEMA_VERSION
+        try:
+            persistence.SCHEMA_VERSION = 2
+            # No migration registered for v1->v2
+
+            restored = load_memory_state(tmp_path, mock_embedding_fn)
+            assert restored is None
+        finally:
+            persistence.SCHEMA_VERSION = old_version
