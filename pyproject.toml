@@ -39,7 +39,11 @@ dependencies = [
     "pyyaml>=6.0",
     "python-dotenv>=1.0.0",
     "rank-bm25>=0.2.2",
+    "mcp[cli]>=1.0.0",
 ]
+
+[project.scripts]
+0gmem-mcp = "zerogmem.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/loganionian/0gmem"

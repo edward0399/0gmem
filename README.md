@@ -72,6 +72,28 @@ result = retriever.retrieve("When did Alice visit the Alps?")
 print(result.composed_context)
 ```
 
+## Claude Code Integration
+
+0GMem can be used as an MCP server to give Claude Code persistent, intelligent memory:
+
+```bash
+# Install and add to Claude Code
+pip install -e .
+python -m spacy download en_core_web_sm
+claude mcp add --transport stdio 0gmem -- python -m zerogmem.mcp_server
+
+# Verify
+claude mcp list
+```
+
+Once configured, Claude Code gains access to memory tools:
+- `store_memory` - Remember important information
+- `retrieve_memories` - Recall relevant context
+- `search_memories_by_entity` - Find info about people/places/things
+- `search_memories_by_time` - Find memories from specific times
+
+See [docs/MCP_SERVER.md](docs/MCP_SERVER.md) for detailed setup and usage.
+
 ## API Reference
 
 ### Core Classes
