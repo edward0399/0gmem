@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-A next-generation AI memory system designed to achieve state-of-the-art performance on the LoCoMo benchmark for long-term conversational memory.
+A next-generation AI memory system that gives LLMs structured, long-term conversational memory. Unlike flat vector stores that lose context over time, 0GMem encodes entities, temporal relationships, causality, and negations at ingestion — enabling accurate recall across hundreds of conversation sessions.
 
 ## Why 0GMem?
 

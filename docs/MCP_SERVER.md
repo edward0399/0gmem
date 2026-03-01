@@ -211,7 +211,7 @@ ls -la ~/.0gmem/
 
 ## Roadmap
 
-- [ ] Full state persistence/serialization
-- [ ] Memory export/import
+- [x] Full state persistence/serialization
+- [x] Memory export/import
 - [ ] Multi-user support
 - [ ] Remote server mode (HTTP transport)
