@@ -11,13 +11,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import pickle
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Tuple
+
 import numpy as np
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
+
+logger = logging.getLogger("0gmem.encoder.cache")
 
 
 @dataclass
@@ -38,6 +49,7 @@ class EmbeddingCacheConfig:
     persist_to_disk: bool = True
     batch_size: int = 100  # Max texts per API call
     model: str = "text-embedding-3-small"
+    max_retries: int = 3
 
 
 class EmbeddingCache:
@@ -71,6 +83,9 @@ class EmbeddingCache:
             "texts_embedded": 0,
         }
 
+        # Retryable exception types (set lazily on first API call)
+        self._retryable_exceptions = None
+
         # Load from disk if available
         if self.config.persist_to_disk:
             self._load_cache()
@@ -82,8 +97,23 @@ class EmbeddingCache:
                 import openai
                 self._client = openai.OpenAI()
             except Exception as e:
-                print(f"Warning: Could not initialize OpenAI client: {e}")
+                logger.warning("Could not initialize OpenAI client: %s", e)
         return self._client
+
+    def _get_retryable_exceptions(self) -> tuple:
+        """Get tuple of retryable OpenAI exception types."""
+        if self._retryable_exceptions is None:
+            try:
+                import openai
+                self._retryable_exceptions = (
+                    openai.RateLimitError,
+                    openai.APIConnectionError,
+                    openai.APITimeoutError,
+                    openai.InternalServerError,
+                )
+            except ImportError:
+                self._retryable_exceptions = ()
+        return self._retryable_exceptions
 
     def _hash_text(self, text: str) -> str:
         """Create a stable hash for text."""
@@ -142,8 +172,22 @@ class EmbeddingCache:
         """Embed texts in batches using OpenAI API."""
         client = self._get_client()
         if client is None:
-            # Fallback to random embeddings
             return [self._random_embedding(text) for text in texts]
+
+        retryable = self._get_retryable_exceptions()
+
+        @retry(
+            retry=retry_if_exception_type(retryable),
+            stop=stop_after_attempt(self.config.max_retries),
+            wait=wait_exponential(multiplier=1, min=1, max=60),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        def _call_api(input_data):
+            return client.embeddings.create(
+                model=self.config.model,
+                input=input_data,
+            )
 
         all_embeddings = []
         batch_size = self.config.batch_size
@@ -152,14 +196,10 @@ class EmbeddingCache:
             batch = texts[i:i + batch_size]
 
             try:
-                response = client.embeddings.create(
-                    model=self.config.model,
-                    input=batch,
-                )
+                response = _call_api(batch)
                 self.stats["api_calls"] += 1
                 self.stats["texts_embedded"] += len(batch)
 
-                # Extract embeddings in order
                 embeddings = [None] * len(batch)
                 for item in response.data:
                     embeddings[item.index] = np.array(item.embedding, dtype=np.float32)
@@ -167,18 +207,20 @@ class EmbeddingCache:
                 all_embeddings.extend(embeddings)
 
             except Exception as e:
-                print(f"Batch embedding error: {e}")
-                # Fallback to individual calls or random
+                logger.error("Batch embedding failed after retries: %s", e)
+                # Fall back to individual calls with retry
                 for text in batch:
                     try:
-                        response = client.embeddings.create(
-                            model=self.config.model,
-                            input=text,
-                        )
+                        response = _call_api(text)
                         self.stats["api_calls"] += 1
                         self.stats["texts_embedded"] += 1
-                        all_embeddings.append(np.array(response.data[0].embedding, dtype=np.float32))
-                    except:
+                        all_embeddings.append(
+                            np.array(response.data[0].embedding, dtype=np.float32)
+                        )
+                    except Exception as e_inner:
+                        logger.error(
+                            "Individual embedding failed after retries: %s", e_inner
+                        )
                         all_embeddings.append(self._random_embedding(text))
 
         return all_embeddings
@@ -217,9 +259,9 @@ class EmbeddingCache:
                     data = pickle.load(f)
                     self._cache = data.get("cache", {})
                     self._access_order = data.get("access_order", list(self._cache.keys()))
-                print(f"Loaded {len(self._cache)} cached embeddings from disk")
+                logger.info("Loaded %d cached embeddings from disk", len(self._cache))
             except Exception as e:
-                print(f"Warning: Could not load embedding cache: {e}")
+                logger.warning("Could not load embedding cache: %s", e)
 
     def save_cache(self) -> None:
         """Save cache to disk."""
@@ -236,9 +278,9 @@ class EmbeddingCache:
                     "cache": self._cache,
                     "access_order": self._access_order,
                 }, f)
-            print(f"Saved {len(self._cache)} embeddings to disk")
+            logger.info("Saved %d embeddings to disk", len(self._cache))
         except Exception as e:
-            print(f"Warning: Could not save embedding cache: {e}")
+            logger.warning("Could not save embedding cache: %s", e)
 
     def get_stats(self) -> Dict[str, any]:
         """Get cache statistics."""

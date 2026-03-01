@@ -6,11 +6,22 @@ Orchestrates entity extraction, temporal extraction, and embedding generation.
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Callable
+
 import numpy as np
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+    before_sleep_log,
+)
+
+logger = logging.getLogger("0gmem.encoder")
 
 from zerogmem.encoder.entity_extractor import EntityExtractor, ExtractedEntity, ExtractedRelation
 from zerogmem.encoder.temporal_extractor import TemporalExtractor, TemporalExpression
@@ -38,6 +49,7 @@ class EncoderConfig:
     use_llm_extraction: bool = False
     extract_importance: bool = True
     importance_threshold: float = 0.3
+    max_retries: int = 3
 
 
 class Encoder:
@@ -83,6 +95,21 @@ class Encoder:
             import openai
             self._client = openai.OpenAI()
 
+            retryable_exceptions = (
+                openai.RateLimitError,
+                openai.APIConnectionError,
+                openai.APITimeoutError,
+                openai.InternalServerError,
+            )
+            max_retries = self.config.max_retries
+
+            @retry(
+                retry=retry_if_exception_type(retryable_exceptions),
+                stop=stop_after_attempt(max_retries),
+                wait=wait_exponential(multiplier=1, min=1, max=60),
+                before_sleep=before_sleep_log(logger, logging.WARNING),
+                reraise=True,
+            )
             def embed(text: str) -> np.ndarray:
                 response = self._client.embeddings.create(
                     model=self.config.embedding_model,
@@ -93,18 +120,20 @@ class Encoder:
             self._embedding_fn = embed
             return embed
 
+        except ImportError:
+            logger.warning("openai package not installed. Using random embeddings.")
         except Exception as e:
-            # Fallback to random embeddings for testing
-            print(f"Warning: Could not initialize OpenAI embeddings: {e}")
-            print("Using random embeddings for testing.")
+            logger.warning(
+                "Could not initialize OpenAI client: %s. Using random embeddings.", e
+            )
 
-            def random_embed(text: str) -> np.ndarray:
-                # Deterministic based on text hash for consistency
-                np.random.seed(hash(text) % (2**32))
-                return np.random.randn(self.config.embedding_dim).astype(np.float32)
+        # Fallback to random embeddings ONLY for initialization failure
+        def random_embed(text: str) -> np.ndarray:
+            np.random.seed(hash(text) % (2**32))
+            return np.random.randn(self.config.embedding_dim).astype(np.float32)
 
-            self._embedding_fn = random_embed
-            return random_embed
+        self._embedding_fn = random_embed
+        return random_embed
 
     def encode(
         self,

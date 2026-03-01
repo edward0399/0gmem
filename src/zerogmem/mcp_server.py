@@ -74,6 +74,7 @@ def _build_configs():
         embedding_model=os.environ.get(
             "ZEROGMEM_EMBEDDING_MODEL", "text-embedding-3-small"
         ),
+        max_retries=_env_int("ZEROGMEM_API_MAX_RETRIES", 3),
     )
     memory_config = MemoryConfig(
         max_episodes=_env_int("ZEROGMEM_MAX_EPISODES", 500),

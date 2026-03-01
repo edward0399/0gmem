@@ -118,6 +118,7 @@ All settings can be configured via environment variables:
 | `ZEROGMEM_WORKING_MEMORY_CAPACITY` | int | `20` | Working memory capacity (recent items kept active) |
 | `ZEROGMEM_EMBEDDING_MODEL` | str | `text-embedding-3-small` | OpenAI embedding model to use |
 | `ZEROGMEM_MAX_CONTEXT_TOKENS` | int | `8000` | Maximum tokens in retrieved context |
+| `ZEROGMEM_API_MAX_RETRIES` | int | `3` | Max retry attempts for OpenAI API calls |
 
 > **Note:** When loading saved memory state from disk, the capacity settings (`max_episodes`, `max_facts`, `working_memory_capacity`) from the saved state take precedence over environment variables. Environment variable values are used for fresh starts only.
 
