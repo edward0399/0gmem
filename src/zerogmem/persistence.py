@@ -19,9 +19,10 @@ import os
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -34,13 +35,13 @@ EMBEDDINGS_FILENAME = "memory_embeddings.npz"
 SCHEMA_VERSION = 1
 
 # Migration registry: version N -> function that upgrades state dict to version N+1.
-_MIGRATIONS: Dict[int, Callable[[dict], dict]] = {
+_MIGRATIONS: dict[int, Callable[[dict], dict]] = {
     # Example for future use:
     # 1: _migrate_v1_to_v2,
 }
 
 
-def _migrate(state: dict, from_version: int) -> Optional[dict]:
+def _migrate(state: dict, from_version: int) -> dict | None:
     """Run migration chain from from_version to SCHEMA_VERSION.
 
     Returns the migrated state dict, or None if a migration step is missing.
@@ -63,10 +64,10 @@ def _migrate(state: dict, from_version: int) -> Optional[dict]:
 class EmbeddingRegistry:
     """Collects embeddings during serialization for bulk NPZ save."""
 
-    def __init__(self):
-        self._store: Dict[str, np.ndarray] = {}
+    def __init__(self) -> None:
+        self._store: dict[str, np.ndarray] = {}
 
-    def register(self, key: str, embedding: Optional[np.ndarray]) -> None:
+    def register(self, key: str, embedding: np.ndarray | None) -> None:
         """Register an embedding under a key. Skips None."""
         if embedding is not None:
             self._store[key] = embedding
@@ -100,7 +101,7 @@ class EmbeddingRegistry:
         return len(self._store)
 
     @staticmethod
-    def load(path: Path) -> Dict[str, np.ndarray]:
+    def load(path: Path) -> dict[str, np.ndarray]:
         """Load embeddings from NPZ file.
 
         Returns a dict of {key: np.ndarray}. Returns empty dict if
@@ -115,8 +116,7 @@ class EmbeddingRegistry:
             return {key: data[key] for key in data.files}
         except Exception as e:
             logger.warning(
-                f"Corrupt embeddings file {npz_path}, "
-                f"proceeding without embeddings: {e}"
+                f"Corrupt embeddings file {npz_path}, " f"proceeding without embeddings: {e}"
             )
             return {}
 
@@ -145,7 +145,7 @@ def _collect_embeddings(manager: MemoryManager, registry: EmbeddingRegistry) -> 
         registry.register(f"fact_{fid}", fact.embedding)
 
 
-def save_memory_state(manager: MemoryManager, path: str | Path) -> Dict[str, Any]:
+def save_memory_state(manager: MemoryManager, path: str | Path) -> dict[str, Any]:
     """Save the full memory state to disk.
 
     Args:
@@ -199,8 +199,8 @@ def save_memory_state(manager: MemoryManager, path: str | Path) -> Dict[str, Any
 
 def load_memory_state(
     path: str | Path,
-    embedding_fn: Optional[callable] = None,
-) -> Optional[MemoryManager]:
+    embedding_fn: Callable[..., Any] | None = None,
+) -> MemoryManager | None:
     """Load memory state from disk.
 
     Recovery cascade:
@@ -246,9 +246,7 @@ def load_memory_state(
 
     if state is None:
         if state_file.exists() or backup_file.exists():
-            logger.warning(
-                "All state files are corrupt. Starting with fresh memory state."
-            )
+            logger.warning("All state files are corrupt. Starting with fresh memory state.")
         else:
             logger.info(f"No state file at {state_file}, returning None")
         return None
@@ -279,12 +277,12 @@ def load_memory_state(
 
     for key, emb in raw_embeddings.items():
         if key.startswith("episode_summary_"):
-            eid = key[len("episode_summary_"):]
+            eid = key[len("episode_summary_") :]
             embeddings_map[eid] = emb
         elif key.startswith("episode_full_"):
             pass  # full_embedding not restored currently (optional)
         elif key.startswith("fact_"):
-            fid = key[len("fact_"):]
+            fid = key[len("fact_") :]
             embeddings_map[fid] = emb
         elif key.startswith("semantic_"):
             embeddings_map[key] = emb
@@ -323,7 +321,7 @@ def export_memory_archive(
     manager: MemoryManager,
     archive_path: str | Path,
     data_dir: str | Path,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Export memory state to a portable ZIP archive.
 
     The archive contains:
@@ -349,7 +347,7 @@ def export_memory_archive(
     from zerogmem import __version__
 
     emb_count = save_summary["embeddings_saved"]
-    metadata = {
+    metadata: dict[str, Any] = {
         "format_version": EXPORT_FORMAT_VERSION,
         "exported_at": datetime.now().isoformat(),
         "source_dir": str(data_dir),
@@ -388,8 +386,8 @@ def export_memory_archive(
 
 def import_memory_archive(
     archive_path: str | Path,
-    embedding_fn: Optional[callable] = None,
-) -> Optional[MemoryManager]:
+    embedding_fn: Callable[..., Any] | None = None,
+) -> MemoryManager | None:
     """Import memory state from a ZIP archive.
 
     Args:
@@ -414,9 +412,7 @@ def import_memory_archive(
 
         # Validate required file
         if STATE_FILENAME not in names:
-            logger.warning(
-                f"Archive missing required file '{STATE_FILENAME}': {archive_path}"
-            )
+            logger.warning(f"Archive missing required file '{STATE_FILENAME}': {archive_path}")
             return None
 
         # Check format version if metadata present

@@ -16,13 +16,14 @@ from __future__ import annotations
 import os
 import re
 import time
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class Claim:
     """A single claim extracted from an answer."""
+
     text: str
     claim_type: str  # factual, temporal, relational, negation
     subject: str
@@ -36,12 +37,13 @@ class Claim:
 @dataclass
 class VerificationResult:
     """Result of verifying an answer."""
+
     original_answer: str
-    claims: List[Claim]
+    claims: list[Claim]
     verified_claims: int
     failed_claims: int
     confidence_score: float
-    refined_answer: Optional[str] = None
+    refined_answer: str | None = None
     reasoning: str = ""
 
 
@@ -59,49 +61,58 @@ class AnswerVerifier:
     # Conversation pairs mapping - each conversation has two speakers
     CONVERSATION_PAIRS = {
         # conv-26
-        "caroline": "melanie", "melanie": "caroline",
+        "caroline": "melanie",
+        "melanie": "caroline",
         # conv-30
-        "gina": "jon", "jon": "gina",
+        "gina": "jon",
+        "jon": "gina",
         # conv-41
-        "john": "maria", "maria": "john",
+        "john": "maria",
+        "maria": "john",
         # conv-42
-        "joanna": "nate", "nate": "joanna",
+        "joanna": "nate",
+        "nate": "joanna",
         # conv-43 (tim, john - john already mapped to maria, need context)
         "tim": "john",  # Note: John appears in multiple convs
         # conv-44
-        "audrey": "andrew", "andrew": "audrey",
+        "audrey": "andrew",
+        "andrew": "audrey",
         # conv-47 (james, john - john ambiguous)
         "james": "john",
         # conv-48
-        "deborah": "jolene", "jolene": "deborah",
+        "deborah": "jolene",
+        "jolene": "deborah",
         # conv-49
-        "evan": "sam", "sam": "evan",
+        "evan": "sam",
+        "sam": "evan",
         # conv-50
-        "calvin": "dave", "dave": "calvin",
+        "calvin": "dave",
+        "dave": "calvin",
     }
 
     def __init__(
         self,
-        llm_client: Optional[Any] = None,
-        model: Optional[str] = None,
+        llm_client: Any | None = None,
+        model: str | None = None,
         max_retries: int = 3,
         retry_backoff: float = 1.5,
     ):
         self._client = llm_client
-        self._model = model or os.getenv("OPENAI_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
+        self._model = (
+            model or os.getenv("OPENAI_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
+        )
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff
 
     def _chat_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 200,
         temperature: float = 0.0,
-    ) -> Optional[str]:
+    ) -> str | None:
         if not self._client:
             return None
 
-        last_err: Optional[Exception] = None
         for attempt in range(self._max_retries):
             try:
                 response = self._client.chat.completions.create(
@@ -110,10 +121,10 @@ class AnswerVerifier:
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                last_err = e
-                sleep_s = min(30.0, self._retry_backoff ** attempt)
+                result: str = response.choices[0].message.content.strip()
+                return result
+            except Exception:
+                sleep_s = min(30.0, self._retry_backoff**attempt)
                 time.sleep(sleep_s)
 
         return None
@@ -123,7 +134,7 @@ class AnswerVerifier:
         question: str,
         answer: str,
         context: str,
-        target_entity: Optional[str] = None,
+        target_entity: str | None = None,
     ) -> VerificationResult:
         """
         Verify an answer against the context.
@@ -200,9 +211,7 @@ class AnswerVerifier:
         # Attempt refinement if confidence is low
         refined_answer = None
         if confidence < 0.5 and failed_claims_list:
-            refined_answer = self._refine_answer(
-                question, answer, context, failed_claims_list
-            )
+            refined_answer = self._refine_answer(question, answer, context, failed_claims_list)
 
         return VerificationResult(
             original_answer=answer,
@@ -220,7 +229,7 @@ class AnswerVerifier:
         answer: str,
         context: str,
         target_entity: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         INNOVATION: Check if the answer is attributing facts to the wrong person.
 
@@ -232,7 +241,7 @@ class AnswerVerifier:
         """
         q_lower = question.lower()
         a_lower = answer.lower()
-        c_lower = context.lower()
+        context.lower()
 
         # Determine the other entity from class-level pairs mapping
         target_lower = target_entity.lower()
@@ -259,7 +268,10 @@ class AnswerVerifier:
                 item = match.group(2).lower()
 
                 # If question asks about target's item, check if only other has it
-                if owner in [target_entity.lower(), "mel"] and target_entity.lower() in ["melanie", "mel"]:
+                if owner in [target_entity.lower(), "mel"] and target_entity.lower() in [
+                    "melanie",
+                    "mel",
+                ]:
                     owner = target_entity.lower()
                 elif owner == target_entity.lower():
                     pass  # Owner matches target
@@ -324,9 +336,32 @@ class AnswerVerifier:
 
                     # Extract key content words from answer (not common words)
                     answer_words = set(a_lower.split()) - {
-                        "the", "a", "an", "is", "was", "were", "are", "has", "had",
-                        "to", "of", "and", "or", "for", "in", "on", "at", "by",
-                        "that", "this", "which", "who", "what", "with", "as", "it",
+                        "the",
+                        "a",
+                        "an",
+                        "is",
+                        "was",
+                        "were",
+                        "are",
+                        "has",
+                        "had",
+                        "to",
+                        "of",
+                        "and",
+                        "or",
+                        "for",
+                        "in",
+                        "on",
+                        "at",
+                        "by",
+                        "that",
+                        "this",
+                        "which",
+                        "who",
+                        "what",
+                        "with",
+                        "as",
+                        "it",
                     }
 
                     # Only check if we have meaningful content words
@@ -345,15 +380,24 @@ class AnswerVerifier:
                         if word_matches >= 2:  # At least 2 matching words
                             if f"[{other_entity}" in line_lower or f"{other_entity}:" in line_lower:
                                 other_matches += 1
-                            if f"[{target_entity.lower()}" in line_lower or f"{target_entity.lower()}:" in line_lower:
+                            if (
+                                f"[{target_entity.lower()}" in line_lower
+                                or f"{target_entity.lower()}:" in line_lower
+                            ):
                                 target_matches += 1
 
                     # If content only appears with other entity, flag it
                     if other_matches > 0 and target_matches == 0:
-                        return f"Content from answer appears only with {other_entity}, not {target_entity}"
+                        return (
+                            f"Content from answer appears only"
+                            f" with {other_entity},"
+                            f" not {target_entity}"
+                        )
 
-        # CASE 4: Question asks about something that only the OTHER entity does
-        # E.g., "What is Melanie excited about in her adoption process?" (Caroline adopts, not Melanie)
+        # CASE 4: Question asks about something that only
+        # the OTHER entity does. E.g., "What is Melanie
+        # excited about in her adoption process?"
+        # (Caroline adopts, not Melanie)
         specific_topics = {
             "adoption": ["adopt", "adoption", "agencies"],
             "pottery": ["pottery", "ceramic", "clay"],
@@ -386,8 +430,8 @@ class AnswerVerifier:
         self,
         question: str,
         context: str,
-        target_entity: Optional[str] = None,
-    ) -> Optional[str]:
+        target_entity: str | None = None,
+    ) -> str | None:
         """
         INNOVATION: Check if the subject of the question exists in the context.
 
@@ -414,11 +458,19 @@ class AnswerVerifier:
                 owner = match.group(1).lower()
                 subject = match.group(2).lower()
                 # Skip common question words
-                if subject not in ['reason', 'plans', 'feelings', 'thoughts', 'opinion', 'view', 'views']:
+                if subject not in [
+                    "reason",
+                    "plans",
+                    "feelings",
+                    "thoughts",
+                    "opinion",
+                    "view",
+                    "views",
+                ]:
                     possessive_subjects.append((owner, subject))
 
         # Check for "after [action]" patterns - verify target entity experienced the action
-        after_action_match = re.search(r'after\s+(?:her|his|their)?\s*(\w+\s+\w+|\w+)', q_lower)
+        after_action_match = re.search(r"after\s+(?:her|his|their)?\s*(\w+\s+\w+|\w+)", q_lower)
         if after_action_match:
             action = after_action_match.group(1)
             action_parts = action.split()
@@ -426,61 +478,82 @@ class AnswerVerifier:
             # Check if action exists AND is associated with target entity
             action_found_for_target = False
             if target_entity:
-                for line in context.split('\n'):
+                for line in context.split("\n"):
                     line_lower = line.lower()
                     # Check if action keywords appear
-                    action_in_line = action in line_lower or all(p in line_lower for p in action_parts if len(p) > 3)
+                    action_in_line = action in line_lower or all(
+                        p in line_lower for p in action_parts if len(p) > 3
+                    )
                     if action_in_line:
-                        # Check if target is associated (as speaker talking about themselves, or explicitly named)
-                        speaker_match = re.search(r'\[(\w+)\]', line)
-                        if speaker_match and speaker_match.group(1).lower() == target_entity.lower():
+                        # Check if target is associated
+                        # (as speaker or explicitly named)
+                        speaker_match = re.search(r"\[(\w+)\]", line)
+                        if (
+                            speaker_match
+                            and speaker_match.group(1).lower() == target_entity.lower()
+                        ):
                             # Speaker is target, check if they're talking about themselves
-                            if 'my ' in line_lower or 'i ' in line_lower or 'i\'ve' in line_lower or 'i\'m' in line_lower:
+                            if (
+                                "my " in line_lower
+                                or "i " in line_lower
+                                or "i've" in line_lower
+                                or "i'm" in line_lower
+                            ):
                                 action_found_for_target = True
                                 break
                         # Or explicitly mentions target with action
                         if target_entity.lower() in line_lower:
                             # Make sure target is the subject of the action
-                            # e.g., "Caroline was in an accident" not "Melanie told Caroline about the accident"
-                            target_before_action = line_lower.find(target_entity.lower()) < line_lower.find(action_parts[0] if action_parts else action)
+                            # e.g., "Caroline was in an accident"
+                            # not "Melanie told Caroline..."
+                            target_before_action = line_lower.find(
+                                target_entity.lower()
+                            ) < line_lower.find(action_parts[0] if action_parts else action)
                             if target_before_action:
                                 action_found_for_target = True
                                 break
             else:
                 # No target, just check if action exists
-                action_found_for_target = action in c_lower or all(p in c_lower for p in action_parts if len(p) > 3)
+                action_found_for_target = action in c_lower or all(
+                    p in c_lower for p in action_parts if len(p) > 3
+                )
 
             if not action_found_for_target:
                 return f"Action '{action}' not found for {target_entity or 'anyone'} in context"
 
         # Check for specific item patterns
         item_patterns = [
-            (r"what (?:does|did) (\w+)'s\s+(\w+(?:\s+\w+)?)\s+(?:symbolize|mean|represent)", "symbolize"),
+            (
+                r"what (?:does|did) (\w+)'s\s+(\w+(?:\s+\w+)?)\s+(?:symbolize|mean|represent)",
+                "symbolize",
+            ),
             (r"what (?:was|is|were) (\w+)'s\s+(\w+(?:\s+\w+)?)", "item"),
             (r"what (?:was|is) the (\w+)\s+(?:that|which)", "item"),
         ]
 
         for pattern, check_type in item_patterns:
-            match = re.search(pattern, q_lower)
-            if match:
+            item_match: re.Match[str] | None = re.search(pattern, q_lower)
+            if item_match:
                 if check_type == "symbolize":
-                    owner = match.group(1)
-                    item = match.group(2)
+                    owner = item_match.group(1)
+                    item = item_match.group(2)
 
                     # Check if this specific combination exists
                     # E.g., "melanie" AND "necklace" both appear together
                     if owner and item:
                         # Look for the item near the owner in context
                         found = False
-                        for line in context.split('\n'):
+                        for line in context.split("\n"):
                             line_lower = line.lower()
                             if item in line_lower:
                                 # Check if owner (or target entity) is associated
-                                if owner in line_lower or (target_entity and target_entity.lower() in line_lower):
+                                if owner in line_lower or (
+                                    target_entity and target_entity.lower() in line_lower
+                                ):
                                     found = True
                                     break
                                 # Check if this is from the owner's speech
-                                speaker_match = re.search(r'\[(\w+)\]', line)
+                                speaker_match = re.search(r"\[(\w+)\]", line)
                                 if speaker_match and speaker_match.group(1).lower() == owner:
                                     found = True
                                     break
@@ -490,18 +563,18 @@ class AnswerVerifier:
 
         # Check for specific subjects that are likely adversarial if not present
         adversarial_subjects = [
-            ('charity race', ['charity race', 'charity run', 'fundraiser run', 'run for charity']),
-            ('necklace', ['necklace', 'pendant', 'jewelry', 'chain']),
+            ("charity race", ["charity race", "charity run", "fundraiser run", "run for charity"]),
+            ("necklace", ["necklace", "pendant", "jewelry", "chain"]),
             ("grandpa's gift", ["grandpa", "grandfather", "gift from grand"]),
             ("grandmother's", ["grandmother", "grandma", "nana"]),
-            ('song that motivates', ['song', 'music that motivates', 'motivating song']),
-            ('hand-painted bowl', ['hand-painted bowl', 'painted bowl']),
-            ('instrument', ['instrument', 'guitar', 'piano', 'violin', 'play music']),
-            ('accident', ['accident', 'crash', 'injured', 'hurt']),
-            ('art show', ['art show', 'exhibition', 'gallery show']),
-            ('temp job', ['temp job', 'temporary job', 'temporary work']),
-            ('dance festival', ['dance festival', 'dance competition', 'dance contest']),
-            ('dance contest', ['dance contest', 'dance competition', 'trophy']),
+            ("song that motivates", ["song", "music that motivates", "motivating song"]),
+            ("hand-painted bowl", ["hand-painted bowl", "painted bowl"]),
+            ("instrument", ["instrument", "guitar", "piano", "violin", "play music"]),
+            ("accident", ["accident", "crash", "injured", "hurt"]),
+            ("art show", ["art show", "exhibition", "gallery show"]),
+            ("temp job", ["temp job", "temporary job", "temporary work"]),
+            ("dance festival", ["dance festival", "dance competition", "dance contest"]),
+            ("dance contest", ["dance contest", "dance competition", "trophy"]),
         ]
 
         for subject_name, variants in adversarial_subjects:
@@ -514,12 +587,15 @@ class AnswerVerifier:
                         if target_entity:
                             target_lower = target_entity.lower()
                             # Look for the subject near target's speech or explicitly about target
-                            for line in context.split('\n'):
+                            for line in context.split("\n"):
                                 line_lower = line.lower()
                                 if v in line_lower:
                                     # Check if target is the speaker
-                                    speaker_match = re.search(r'\[(\w+)\]', line)
-                                    if speaker_match and speaker_match.group(1).lower() == target_lower:
+                                    speaker_match = re.search(r"\[(\w+)\]", line)
+                                    if (
+                                        speaker_match
+                                        and speaker_match.group(1).lower() == target_lower
+                                    ):
                                         found = True
                                         break
                                     # Check if line mentions target explicitly with subject
@@ -532,7 +608,9 @@ class AnswerVerifier:
                             found = True
                             break
                 if not found:
-                    return f"'{subject_name}' not mentioned for {target_entity or 'anyone'} in context"
+                    return (
+                        f"'{subject_name}' not mentioned for {target_entity or 'anyone'} in context"
+                    )
 
         # INNOVATION: Check if possessive items belong to the correct entity
         # "Caroline's bowl" should check if CAROLINE has a bowl, not just if ANY bowl exists
@@ -544,18 +622,29 @@ class AnswerVerifier:
                 item = poss_match.group(2).lower()
 
                 # Only check if owner is the target entity
-                if owner == target_entity.lower() or owner == 'mel' and target_entity.lower() == 'melanie':
+                if (
+                    owner == target_entity.lower()
+                    or owner == "mel"
+                    and target_entity.lower() == "melanie"
+                ):
                     # Search for evidence of target owning this item
                     # Look for patterns like "[Caroline]: ...my bowl..." or "Caroline's bowl"
                     item_found_for_target = False
-                    for line in context.split('\n'):
+                    for line in context.split("\n"):
                         line_lower = line.lower()
                         # Check if item is mentioned with target as speaker
                         if item in line_lower:
                             # Speaker said something about this item
-                            speaker_match = re.search(r'\[(\w+)\]', line)
-                            if speaker_match and speaker_match.group(1).lower() == target_entity.lower():
-                                if 'my ' + item in line_lower or 'made ' in line_lower or 'painted ' in line_lower:
+                            speaker_match = re.search(r"\[(\w+)\]", line)
+                            if (
+                                speaker_match
+                                and speaker_match.group(1).lower() == target_entity.lower()
+                            ):
+                                if (
+                                    "my " + item in line_lower
+                                    or "made " in line_lower
+                                    or "painted " in line_lower
+                                ):
                                     item_found_for_target = True
                                     break
                             # Or the item is explicitly associated with target
@@ -567,19 +656,26 @@ class AnswerVerifier:
                         # Check if other entity has it (misattribution)
                         other_entity = self.CONVERSATION_PAIRS.get(target_entity.lower(), "")
                         if other_entity:
-                            for line in context.split('\n'):
+                            for line in context.split("\n"):
                                 line_lower = line.lower()
                                 if item in line_lower:
-                                    speaker_match = re.search(r'\[(\w+)\]', line)
-                                    if speaker_match and speaker_match.group(1).lower() == other_entity:
-                                        if 'my ' + item in line_lower or 'made ' in line_lower:
-                                            return f"'{item}' belongs to {other_entity}, not {target_entity}"
+                                    speaker_match = re.search(r"\[(\w+)\]", line)
+                                    if (
+                                        speaker_match
+                                        and speaker_match.group(1).lower() == other_entity
+                                    ):
+                                        if "my " + item in line_lower or "made " in line_lower:
+                                            return (
+                                                f"'{item}' belongs to"
+                                                f" {other_entity},"
+                                                f" not {target_entity}"
+                                            )
 
         return None
 
-    def _extract_claims(self, answer: str, target_entity: Optional[str] = None) -> List[Claim]:
+    def _extract_claims(self, answer: str, target_entity: str | None = None) -> list[Claim]:
         """Extract verifiable claims from an answer."""
-        claims = []
+        claims: list[Claim] = []
         answer_lower = answer.lower()
 
         # Skip very short answers
@@ -588,11 +684,11 @@ class AnswerVerifier:
 
         # Extract factual claims (X is/has/does Y)
         factual_patterns = [
-            (r'(\w+)\s+(?:is|was|are|were)\s+(.+?)(?:\.|,|$)', 'factual'),
-            (r'(\w+)\s+(?:has|had|have)\s+(.+?)(?:\.|,|$)', 'factual'),
-            (r'(\w+)\s+(?:does|did|do)\s+(.+?)(?:\.|,|$)', 'factual'),
-            (r'(\w+)\s+(?:went|visited|attended)\s+(.+?)(?:\.|,|$)', 'factual'),
-            (r'(\w+)\s+(?:likes?|loves?|enjoys?)\s+(.+?)(?:\.|,|$)', 'factual'),
+            (r"(\w+)\s+(?:is|was|are|were)\s+(.+?)(?:\.|,|$)", "factual"),
+            (r"(\w+)\s+(?:has|had|have)\s+(.+?)(?:\.|,|$)", "factual"),
+            (r"(\w+)\s+(?:does|did|do)\s+(.+?)(?:\.|,|$)", "factual"),
+            (r"(\w+)\s+(?:went|visited|attended)\s+(.+?)(?:\.|,|$)", "factual"),
+            (r"(\w+)\s+(?:likes?|loves?|enjoys?)\s+(.+?)(?:\.|,|$)", "factual"),
         ]
 
         for pattern, claim_type in factual_patterns:
@@ -604,54 +700,60 @@ class AnswerVerifier:
                 if len(obj) < 2 or len(obj) > 100:
                     continue
 
-                claims.append(Claim(
-                    text=match.group(0),
-                    claim_type=claim_type,
-                    subject=subject,
-                    predicate="is/has/does",
-                    obj=obj,
-                ))
+                claims.append(
+                    Claim(
+                        text=match.group(0),
+                        claim_type=claim_type,
+                        subject=subject,
+                        predicate="is/has/does",
+                        obj=obj,
+                    )
+                )
 
         # Extract temporal claims
         temporal_patterns = [
-            (r'(?:on|in|at)\s+(\d{1,2}\s+\w+\s+\d{4})', 'temporal'),
-            (r'(\d+)\s+(?:years?|months?|days?)\s+ago', 'temporal'),
-            (r'(?:for|since)\s+(\d+)\s+(?:years?|months?)', 'temporal'),
+            (r"(?:on|in|at)\s+(\d{1,2}\s+\w+\s+\d{4})", "temporal"),
+            (r"(\d+)\s+(?:years?|months?|days?)\s+ago", "temporal"),
+            (r"(?:for|since)\s+(\d+)\s+(?:years?|months?)", "temporal"),
         ]
 
         for pattern, claim_type in temporal_patterns:
             for match in re.finditer(pattern, answer_lower):
-                claims.append(Claim(
-                    text=match.group(0),
-                    claim_type=claim_type,
-                    subject=target_entity or "entity",
-                    predicate="temporal",
-                    obj=match.group(1),
-                ))
+                claims.append(
+                    Claim(
+                        text=match.group(0),
+                        claim_type=claim_type,
+                        subject=target_entity or "entity",
+                        predicate="temporal",
+                        obj=match.group(1),
+                    )
+                )
 
         # Extract negation claims
-        if any(neg in answer_lower for neg in ['no', 'not', 'never', 'none', "doesn't", "don't"]):
-            claims.append(Claim(
-                text=answer,
-                claim_type='negation',
-                subject=target_entity or "entity",
-                predicate="negates",
-                obj=answer_lower,
-            ))
+        if any(neg in answer_lower for neg in ["no", "not", "never", "none", "doesn't", "don't"]):
+            claims.append(
+                Claim(
+                    text=answer,
+                    claim_type="negation",
+                    subject=target_entity or "entity",
+                    predicate="negates",
+                    obj=answer_lower,
+                )
+            )
 
         return claims
 
-    def _verify_claim(self, claim: Claim, context: str) -> Tuple[bool, str]:
+    def _verify_claim(self, claim: Claim, context: str) -> tuple[bool, str]:
         """Verify a single claim against context."""
         context_lower = context.lower()
 
-        if claim.claim_type == 'factual':
+        if claim.claim_type == "factual":
             # Check if subject and object appear together in context
             subject = claim.subject.lower()
             obj = claim.obj.lower()
 
             # Look for sentences containing both
-            sentences = re.split(r'[.!?]', context_lower)
+            sentences = re.split(r"[.!?]", context_lower)
             for sentence in sentences:
                 if subject in sentence and obj in sentence:
                     return True, sentence.strip()
@@ -668,16 +770,16 @@ class AnswerVerifier:
 
             return False, ""
 
-        elif claim.claim_type == 'temporal':
+        elif claim.claim_type == "temporal":
             # Check if temporal expression appears in context
             if claim.obj in context_lower:
                 return True, f"Found '{claim.obj}' in context"
             return False, ""
 
-        elif claim.claim_type == 'negation':
+        elif claim.claim_type == "negation":
             # For negation claims, check if the negated thing is actually NOT in context
             # or if there's explicit negation
-            negation_words = ['never', 'not', "don't", "doesn't", "no ", "none"]
+            negation_words = ["never", "not", "don't", "doesn't", "no ", "none"]
             for neg in negation_words:
                 if neg in context_lower:
                     return True, f"Found negation '{neg}' in context"
@@ -709,8 +811,8 @@ class AnswerVerifier:
         question: str,
         original_answer: str,
         context: str,
-        failed_claims: List[Claim],
-    ) -> Optional[str]:
+        failed_claims: list[Claim],
+    ) -> str | None:
         """
         Attempt to refine an answer based on failed verification.
 
@@ -760,8 +862,8 @@ class ConsistencyChecker:
     then pick the most consistent one.
     """
 
-    def __init__(self):
-        self.answer_cache: Dict[str, List[str]] = {}
+    def __init__(self) -> None:
+        self.answer_cache: dict[str, list[str]] = {}
 
     def add_answer(self, question_id: str, answer: str) -> None:
         """Add an answer to the cache for consistency checking."""
@@ -769,7 +871,7 @@ class ConsistencyChecker:
             self.answer_cache[question_id] = []
         self.answer_cache[question_id].append(answer)
 
-    def get_consensus_answer(self, question_id: str) -> Optional[str]:
+    def get_consensus_answer(self, question_id: str) -> str | None:
         """Get the most consistent answer for a question."""
         answers = self.answer_cache.get(question_id, [])
         if not answers:
@@ -779,7 +881,7 @@ class ConsistencyChecker:
             return answers[0]
 
         # Find most common answer (or most similar)
-        answer_counts = {}
+        answer_counts: dict[str, int] = {}
         for answer in answers:
             # Normalize answer
             normalized = answer.lower().strip()

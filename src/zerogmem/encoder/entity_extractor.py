@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
-from enum import Enum
+from typing import Any
 
 from zerogmem.graph.entity import EntityType
 
@@ -17,23 +16,25 @@ from zerogmem.graph.entity import EntityType
 @dataclass
 class ExtractedEntity:
     """An extracted entity mention."""
-    text: str                        # As mentioned in text
-    normalized: str                  # Normalized form
+
+    text: str  # As mentioned in text
+    normalized: str  # Normalized form
     type: EntityType
-    span: Tuple[int, int]           # Character positions
+    span: tuple[int, int]  # Character positions
     confidence: float = 1.0
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    attributes: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class ExtractedRelation:
     """An extracted relation between entities."""
-    subject: str                     # Subject entity text
-    predicate: str                   # Relation type
-    object: str                      # Object entity text
-    negated: bool = False           # Is this relation negated?
+
+    subject: str  # Subject entity text
+    predicate: str  # Relation type
+    object: str  # Object entity text
+    negated: bool = False  # Is this relation negated?
     confidence: float = 1.0
-    span: Tuple[int, int] = (0, 0)
+    span: tuple[int, int] = (0, 0)
 
 
 class EntityExtractor:
@@ -53,20 +54,20 @@ class EntityExtractor:
     # Relation patterns: (pattern, relation_type)
     RELATION_PATTERNS = [
         # Likes/Preferences
-        (r"(\w+(?:\s\w+)?)\s+(?:really\s+)?(?:like|love|enjoy|prefer)s?\s+(.+?)(?:\.|,|$)", "likes"),
+        (
+            r"(\w+(?:\s\w+)?)\s+(?:really\s+)?(?:like|love|enjoy|prefer)s?\s+(.+?)(?:\.|,|$)",
+            "likes",
+        ),
         (r"(\w+(?:\s\w+)?)\s+(?:hate|dislike|can't stand)s?\s+(.+?)(?:\.|,|$)", "dislikes"),
-
         # Relationships
         (r"(\w+(?:\s\w+)?)\s+is\s+(?:a\s+)?friend\s+(?:of|with)\s+(\w+(?:\s\w+)?)", "friend_of"),
         (r"(\w+(?:\s\w+)?)\s+knows?\s+(\w+(?:\s\w+)?)", "knows"),
         (r"(\w+(?:\s\w+)?)\s+(?:is\s+)?married\s+to\s+(\w+(?:\s\w+)?)", "married_to"),
         (r"(\w+(?:\s\w+)?)\s+works?\s+(?:at|for)\s+(.+?)(?:\.|,|$)", "works_at"),
         (r"(\w+(?:\s\w+)?)\s+lives?\s+(?:in|at)\s+(.+?)(?:\.|,|$)", "lives_in"),
-
         # Possession
         (r"(\w+(?:\s\w+)?)'s\s+(\w+)", "has"),
         (r"(\w+(?:\s\w+)?)\s+(?:has|have|own)s?\s+(?:a\s+)?(.+?)(?:\.|,|$)", "has"),
-
         # Attributes
         (r"(\w+(?:\s\w+)?)\s+is\s+(?:a\s+)?(\w+)", "is_a"),
     ]
@@ -74,17 +75,38 @@ class EntityExtractor:
     # Negative preference patterns - CRITICAL for adversarial questions
     NEGATIVE_PREFERENCE_PATTERNS = [
         # "I could never eat X" / "I would never eat X"
-        (r"(I|we|he|she|they|\w+)\s+(?:could|would|can|will)\s+never\s+(\w+)\s+(.+?)(?:\.|,|!|$)", "cannot"),
+        (
+            r"(I|we|he|she|they|\w+)\s+(?:could|would|can|will)\s+never\s+(\w+)\s+(.+?)(?:\.|,|!|$)",
+            "cannot",
+        ),
         # "I don't like X" / "I don't eat X"
-        (r"(I|we|he|she|they|\w+)\s+(?:don't|doesn't|do not|does not)\s+(?:like|love|enjoy|eat|want)\s+(.+?)(?:\.|,|!|$)", "dislikes"),
+        (
+            r"(I|we|he|she|they|\w+)\s+"
+            r"(?:don't|doesn't|do not|does not)\s+"
+            r"(?:like|love|enjoy|eat|want)\s+"
+            r"(.+?)(?:\.|,|!|$)",
+            "dislikes",
+        ),
         # "I hate X" / "I can't stand X"
-        (r"(I|we|he|she|they|\w+)\s+(?:hate|detest|loathe|can't stand|cannot stand)\s+(.+?)(?:\.|,|!|$)", "dislikes"),
+        (
+            r"(I|we|he|she|they|\w+)\s+"
+            r"(?:hate|detest|loathe|can't stand"
+            r"|cannot stand)\s+"
+            r"(.+?)(?:\.|,|!|$)",
+            "dislikes",
+        ),
         # "I'm not a fan of X"
-        (r"(I|we|he|she|they|\w+)(?:'m|\s+am|\s+is|\s+are)\s+not\s+(?:a\s+)?fan\s+of\s+(.+?)(?:\.|,|!|$)", "dislikes"),
+        (
+            r"(I|we|he|she|they|\w+)(?:'m|\s+am|\s+is|\s+are)\s+not\s+(?:a\s+)?fan\s+of\s+(.+?)(?:\.|,|!|$)",
+            "dislikes",
+        ),
         # "X is not for me"
         (r"(.+?)\s+(?:is|are)\s+not\s+for\s+(me|us|him|her|them|\w+)", "dislikes"),
         # "I never eat/like X"
-        (r"(I|we|he|she|they|\w+)\s+never\s+(?:eat|like|enjoy|want)s?\s+(.+?)(?:\.|,|!|$)", "never_does"),
+        (
+            r"(I|we|he|she|they|\w+)\s+never\s+(?:eat|like|enjoy|want)s?\s+(.+?)(?:\.|,|!|$)",
+            "never_does",
+        ),
     ]
 
     # Negation patterns - expanded for better detection
@@ -99,8 +121,8 @@ class EntityExtractor:
         r"wasn't\s+",
         r"weren't\s+",
         r"(?:could|would|can|will)\s+never\s+",  # Added: "could never", "would never"
-        r"(?:could|would|can|will)\s+not\s+",    # Added: "could not", "would not"
-        r"(?:could|would|can|will)n't\s+",       # Added: "couldn't", "wouldn't"
+        r"(?:could|would|can|will)\s+not\s+",  # Added: "could not", "would not"
+        r"(?:could|would|can|will)n't\s+",  # Added: "couldn't", "wouldn't"
     ]
 
     # Location indicators
@@ -109,7 +131,7 @@ class EntityExtractor:
     # Organization indicators
     ORG_SUFFIXES = ["inc", "corp", "llc", "ltd", "company", "co", "org", "foundation"]
 
-    def __init__(self, use_llm: bool = False, llm_client: Optional[Any] = None):
+    def __init__(self, use_llm: bool = False, llm_client: Any | None = None):
         """
         Initialize the entity extractor.
 
@@ -120,7 +142,7 @@ class EntityExtractor:
         self.use_llm = use_llm
         self.llm_client = llm_client
 
-    def extract_entities(self, text: str) -> List[ExtractedEntity]:
+    def extract_entities(self, text: str) -> list[ExtractedEntity]:
         """
         Extract entities from text.
 
@@ -148,7 +170,7 @@ class EntityExtractor:
 
         return unique_entities
 
-    def extract_relations(self, text: str) -> List[ExtractedRelation]:
+    def extract_relations(self, text: str) -> list[ExtractedRelation]:
         """
         Extract relationships between entities from text.
 
@@ -194,7 +216,7 @@ class EntityExtractor:
 
         return relations
 
-    def extract_negations(self, text: str) -> List[Dict[str, Any]]:
+    def extract_negations(self, text: str) -> list[dict[str, Any]]:
         """
         Extract explicit negations for adversarial robustness.
 
@@ -210,13 +232,15 @@ class EntityExtractor:
             negation_word = match.group(1)
             negated_content = match.group(2).strip()
 
-            negations.append({
-                "negation_marker": negation_word.strip(),
-                "content": negated_content,
-                "full_text": match.group().strip(),
-                "span": (match.start(), match.end()),
-                "type": "general",
-            })
+            negations.append(
+                {
+                    "negation_marker": negation_word.strip(),
+                    "content": negated_content,
+                    "full_text": match.group().strip(),
+                    "span": (match.start(), match.end()),
+                    "type": "general",
+                }
+            )
 
         # Extract preference-specific negations with more structure
         for pattern, neg_type in self.NEGATIVE_PREFERENCE_PATTERNS:
@@ -228,106 +252,130 @@ class EntityExtractor:
                 # Determine the specific action/preference being negated
                 full_match = match.group()
 
-                negations.append({
-                    "negation_marker": neg_type,
-                    "subject": subject,
-                    "object": obj,
-                    "content": f"{subject} does not {neg_type} {obj}",
-                    "full_text": full_match.strip(),
-                    "span": (match.start(), match.end()),
-                    "type": "preference",
-                    "is_preference_negation": True,
-                })
+                negations.append(
+                    {
+                        "negation_marker": neg_type,
+                        "subject": subject,
+                        "object": obj,
+                        "content": f"{subject} does not {neg_type} {obj}",
+                        "full_text": full_match.strip(),
+                        "span": (match.start(), match.end()),
+                        "type": "preference",
+                        "is_preference_negation": True,
+                    }
+                )
 
         return negations
 
-    def _extract_names(self, text: str) -> List[ExtractedEntity]:
+    def _extract_names(self, text: str) -> list[ExtractedEntity]:
         """Extract person names from text."""
         entities = []
 
         # Pattern for names with titles
-        title_pattern = r'\b(' + '|'.join(self.NAME_TITLES) + r')\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b'
+        title_pattern = (
+            r"\b(" + "|".join(self.NAME_TITLES) + r")\.?\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b"
+        )
         for match in re.finditer(title_pattern, text, re.IGNORECASE):
             name = match.group(2)
-            entities.append(ExtractedEntity(
-                text=match.group(),
-                normalized=name,
-                type=EntityType.PERSON,
-                span=(match.start(), match.end()),
-            ))
+            entities.append(
+                ExtractedEntity(
+                    text=match.group(),
+                    normalized=name,
+                    type=EntityType.PERSON,
+                    span=(match.start(), match.end()),
+                )
+            )
 
         # Pattern for capitalized names (2-3 words)
-        name_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b'
+        name_pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b"
         for match in re.finditer(name_pattern, text):
             # Skip if at sentence start
-            if match.start() > 0 and text[match.start() - 1] not in '.!?\n':
+            if match.start() > 0 and text[match.start() - 1] not in ".!?\n":
                 name = match.group(1)
                 # Skip common words that might be capitalized
-                if name.lower() not in ['the', 'this', 'that', 'these', 'those']:
-                    entities.append(ExtractedEntity(
-                        text=name,
-                        normalized=name,
-                        type=EntityType.PERSON,
-                        span=(match.start(), match.end()),
-                        confidence=0.7,  # Lower confidence without title
-                    ))
+                if name.lower() not in ["the", "this", "that", "these", "those"]:
+                    entities.append(
+                        ExtractedEntity(
+                            text=name,
+                            normalized=name,
+                            type=EntityType.PERSON,
+                            span=(match.start(), match.end()),
+                            confidence=0.7,  # Lower confidence without title
+                        )
+                    )
 
         # First person references (I, me, my)
-        first_person = re.findall(r'\b(I|me|my|mine|myself)\b', text, re.IGNORECASE)
+        first_person = re.findall(r"\b(I|me|my|mine|myself)\b", text, re.IGNORECASE)
         if first_person:
-            entities.append(ExtractedEntity(
-                text="I",
-                normalized="USER",  # Normalized as USER
-                type=EntityType.PERSON,
-                span=(0, 0),  # Multiple occurrences
-                confidence=1.0,
-            ))
+            entities.append(
+                ExtractedEntity(
+                    text="I",
+                    normalized="USER",  # Normalized as USER
+                    type=EntityType.PERSON,
+                    span=(0, 0),  # Multiple occurrences
+                    confidence=1.0,
+                )
+            )
 
         return entities
 
-    def _extract_organizations(self, text: str) -> List[ExtractedEntity]:
+    def _extract_organizations(self, text: str) -> list[ExtractedEntity]:
         """Extract organization names from text."""
         entities = []
 
         # Organizations with suffixes
-        suffix_pattern = r'\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)\s+(' + '|'.join(self.ORG_SUFFIXES) + r')\.?\b'
+        suffix_pattern = (
+            r"\b([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)\s+("
+            + "|".join(self.ORG_SUFFIXES)
+            + r")\.?\b"
+        )
         for match in re.finditer(suffix_pattern, text, re.IGNORECASE):
-            entities.append(ExtractedEntity(
-                text=match.group(),
-                normalized=match.group(1),
-                type=EntityType.ORGANIZATION,
-                span=(match.start(), match.end()),
-            ))
-
-        # All-caps acronyms (likely organizations)
-        acronym_pattern = r'\b([A-Z]{2,5})\b'
-        for match in re.finditer(acronym_pattern, text):
-            # Skip common acronyms that aren't organizations
-            if match.group(1) not in ['AM', 'PM', 'TV', 'OK', 'US', 'UK']:
-                entities.append(ExtractedEntity(
-                    text=match.group(1),
+            entities.append(
+                ExtractedEntity(
+                    text=match.group(),
                     normalized=match.group(1),
                     type=EntityType.ORGANIZATION,
                     span=(match.start(), match.end()),
-                    confidence=0.6,
-                ))
+                )
+            )
+
+        # All-caps acronyms (likely organizations)
+        acronym_pattern = r"\b([A-Z]{2,5})\b"
+        for match in re.finditer(acronym_pattern, text):
+            # Skip common acronyms that aren't organizations
+            if match.group(1) not in ["AM", "PM", "TV", "OK", "US", "UK"]:
+                entities.append(
+                    ExtractedEntity(
+                        text=match.group(1),
+                        normalized=match.group(1),
+                        type=EntityType.ORGANIZATION,
+                        span=(match.start(), match.end()),
+                        confidence=0.6,
+                    )
+                )
 
         return entities
 
-    def _extract_locations(self, text: str) -> List[ExtractedEntity]:
+    def _extract_locations(self, text: str) -> list[ExtractedEntity]:
         """Extract location names from text."""
         entities = []
 
         # Locations after prepositions
-        prep_pattern = r'\b(?:' + '|'.join(self.LOCATION_PREPOSITIONS) + r')\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b'
+        prep_pattern = (
+            r"\b(?:"
+            + "|".join(self.LOCATION_PREPOSITIONS)
+            + r")\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b"
+        )
         for match in re.finditer(prep_pattern, text):
-            entities.append(ExtractedEntity(
-                text=match.group(1),
-                normalized=match.group(1),
-                type=EntityType.LOCATION,
-                span=(match.start(), match.end()),
-                confidence=0.8,
-            ))
+            entities.append(
+                ExtractedEntity(
+                    text=match.group(1),
+                    normalized=match.group(1),
+                    type=EntityType.LOCATION,
+                    span=(match.start(), match.end()),
+                    confidence=0.8,
+                )
+            )
 
         return entities
 
@@ -343,10 +391,7 @@ class EntityExtractor:
 
         return False
 
-    def get_extraction_summary(
-        self,
-        text: str
-    ) -> Dict[str, Any]:
+    def get_extraction_summary(self, text: str) -> dict[str, Any]:
         """
         Get comprehensive extraction summary.
 

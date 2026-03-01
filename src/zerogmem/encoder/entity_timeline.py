@@ -15,29 +15,28 @@ rather than relying on LLM reasoning over noisy context.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple, Set
-from collections import defaultdict
 
 
 @dataclass
 class TimelineEvent:
     """An event in an entity's timeline."""
+
     event_id: str
     entity: str
     description: str
     event_type: str  # activity, milestone, state_change, recurring
 
     # Temporal information
-    absolute_date: Optional[datetime] = None
-    relative_to: Optional[str] = None  # event_id this is relative to
+    absolute_date: datetime | None = None
+    relative_to: str | None = None  # event_id this is relative to
     relative_position: str = ""  # "before", "after", "during", "same_day"
-    duration: Optional[str] = None  # "4 years", "2 weeks", etc.
+    duration: str | None = None  # "4 years", "2 weeks", etc.
 
     # Source tracking
     session_id: str = ""
-    session_date: Optional[datetime] = None
+    session_date: datetime | None = None
     source_text: str = ""
     confidence: float = 0.9
 
@@ -45,11 +44,12 @@ class TimelineEvent:
 @dataclass
 class EntityState:
     """A state/attribute of an entity at a point in time."""
+
     entity: str
     attribute: str  # relationship_status, location, job, etc.
     value: str
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None  # None means still current
+    start_date: datetime | None = None
+    end_date: datetime | None = None  # None means still current
     source_event_id: str = ""
 
 
@@ -66,9 +66,9 @@ class EntityTimeline:
 
     def __init__(self, entity: str):
         self.entity = entity
-        self.events: Dict[str, TimelineEvent] = {}
-        self.states: List[EntityState] = []
-        self.event_order: List[str] = []  # Ordered list of event IDs
+        self.events: dict[str, TimelineEvent] = {}
+        self.states: list[EntityState] = []
+        self.event_order: list[str] = []  # Ordered list of event IDs
 
     def add_event(self, event: TimelineEvent) -> None:
         """Add an event to the timeline."""
@@ -93,7 +93,9 @@ class EntityTimeline:
         """Add a state to the entity."""
         self.states.append(state)
 
-    def get_event_on_date(self, target_date: datetime, tolerance_days: int = 7) -> List[TimelineEvent]:
+    def get_event_on_date(
+        self, target_date: datetime, tolerance_days: int = 7
+    ) -> list[TimelineEvent]:
         """Find events on or near a specific date."""
         results = []
         for event in self.events.values():
@@ -101,17 +103,22 @@ class EntityTimeline:
                 diff = abs((event.absolute_date - target_date).days)
                 if diff <= tolerance_days:
                     results.append(event)
-        return sorted(results, key=lambda e: abs((e.absolute_date - target_date).days))
+        return sorted(
+            results,
+            key=lambda e: (abs((e.absolute_date - target_date).days) if e.absolute_date else 0),
+        )
 
-    def get_events_in_range(self, start: datetime, end: datetime) -> List[TimelineEvent]:
+    def get_events_in_range(self, start: datetime, end: datetime) -> list[TimelineEvent]:
         """Get all events in a date range."""
-        results = []
+        results: list[TimelineEvent] = []
         for event in self.events.values():
             if event.absolute_date and start <= event.absolute_date <= end:
                 results.append(event)
-        return sorted(results, key=lambda e: e.absolute_date)
+        return sorted(results, key=lambda e: e.absolute_date or start)
 
-    def get_state_at_time(self, attribute: str, at_time: Optional[datetime] = None) -> Optional[EntityState]:
+    def get_state_at_time(
+        self, attribute: str, at_time: datetime | None = None
+    ) -> EntityState | None:
         """Get the state of an attribute at a specific time (or current if None)."""
         at_time = at_time or datetime.now()
 
@@ -129,7 +136,7 @@ class EntityTimeline:
 
         return None
 
-    def get_duration(self, attribute: str) -> Optional[str]:
+    def get_duration(self, attribute: str) -> str | None:
         """Get how long an entity has had a particular attribute."""
         current_state = self.get_state_at_time(attribute)
         if current_state and current_state.start_date:
@@ -157,56 +164,71 @@ class TimelineBuilder:
 
     # Date patterns
     ABSOLUTE_DATE_PATTERNS = [
-        (r'(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})', 'dmy'),
-        (r'(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})', 'mdy'),
-        (r'(\d{4})', 'year_only'),
+        (
+            r"(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})",
+            "dmy",
+        ),
+        (
+            r"(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})",
+            "mdy",
+        ),
+        (r"(\d{4})", "year_only"),
     ]
 
     RELATIVE_DATE_PATTERNS = [
-        (r'yesterday', -1),
-        (r'today', 0),
-        (r'last\s+week', -7),
-        (r'last\s+weekend', -3),
-        (r'last\s+month', -30),
-        (r'last\s+(?:friday|saturday|sunday)', -7),
-        (r'two\s+weeks?\s+ago', -14),
-        (r'a\s+few\s+days?\s+ago', -3),
-        (r'recently', -7),
+        (r"yesterday", -1),
+        (r"today", 0),
+        (r"last\s+week", -7),
+        (r"last\s+weekend", -3),
+        (r"last\s+month", -30),
+        (r"last\s+(?:friday|saturday|sunday)", -7),
+        (r"two\s+weeks?\s+ago", -14),
+        (r"a\s+few\s+days?\s+ago", -3),
+        (r"recently", -7),
     ]
 
     DURATION_PATTERNS = [
-        r'for\s+(\d+)\s+(years?|months?|weeks?|days?)',
-        r'(\d+)\s+(years?|months?|weeks?|days?)\s+ago',
-        r'since\s+(\d{4})',
-        r'been\s+(\d+)\s+(years?|months?)',
+        r"for\s+(\d+)\s+(years?|months?|weeks?|days?)",
+        r"(\d+)\s+(years?|months?|weeks?|days?)\s+ago",
+        r"since\s+(\d{4})",
+        r"been\s+(\d+)\s+(years?|months?)",
     ]
 
     EVENT_PATTERNS = [
-        (r'(?:went|visited|attended)\s+(?:to\s+)?(?:the\s+)?(.+?)(?:\.|,|!|$)', 'activity'),
-        (r'(?:signed up|joined|started)\s+(?:for|in)?\s*(.+?)(?:\.|,|!|$)', 'milestone'),
-        (r'(?:celebrated|had)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)', 'activity'),
-        (r'(?:ran|participated in)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)', 'activity'),
-        (r'(?:painted|created|made)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)', 'activity'),
-        (r'(?:went)\s+(camping|hiking|swimming|biking)', 'activity'),
-        (r'(?:took|brought)\s+(?:the\s+)?(?:kids?|children)\s+to\s+(.+?)(?:\.|,|!|$)', 'activity'),
+        (r"(?:went|visited|attended)\s+(?:to\s+)?(?:the\s+)?(.+?)(?:\.|,|!|$)", "activity"),
+        (r"(?:signed up|joined|started)\s+(?:for|in)?\s*(.+?)(?:\.|,|!|$)", "milestone"),
+        (r"(?:celebrated|had)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)", "activity"),
+        (r"(?:ran|participated in)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)", "activity"),
+        (r"(?:painted|created|made)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)", "activity"),
+        (r"(?:went)\s+(camping|hiking|swimming|biking)", "activity"),
+        (r"(?:took|brought)\s+(?:the\s+)?(?:kids?|children)\s+to\s+(.+?)(?:\.|,|!|$)", "activity"),
     ]
 
     STATE_PATTERNS = [
-        (r'(?:i am|i\'m|she is|he is)\s+(\d+)\s+years?\s+old', 'age'),
-        (r'(?:married|single|divorced|dating)', 'relationship_status'),
-        (r'(?:live|living|moved)\s+(?:in|to)\s+(\w+)', 'location'),
-        (r'(?:work|working)\s+(?:as|at)\s+(.+?)(?:\.|,|$)', 'occupation'),
-        (r'friends?\s+for\s+(\d+)\s+years?', 'friends_duration'),
+        (r"(?:i am|i\'m|she is|he is)\s+(\d+)\s+years?\s+old", "age"),
+        (r"(?:married|single|divorced|dating)", "relationship_status"),
+        (r"(?:live|living|moved)\s+(?:in|to)\s+(\w+)", "location"),
+        (r"(?:work|working)\s+(?:as|at)\s+(.+?)(?:\.|,|$)", "occupation"),
+        (r"friends?\s+for\s+(\d+)\s+years?", "friends_duration"),
     ]
 
     MONTH_MAP = {
-        'january': 1, 'february': 2, 'march': 3, 'april': 4,
-        'may': 5, 'june': 6, 'july': 7, 'august': 8,
-        'september': 9, 'october': 10, 'november': 11, 'december': 12
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
     }
 
-    def __init__(self):
-        self.timelines: Dict[str, EntityTimeline] = {}
+    def __init__(self) -> None:
+        self.timelines: dict[str, EntityTimeline] = {}
         self._event_counter = 0
 
     def get_or_create_timeline(self, entity: str) -> EntityTimeline:
@@ -221,8 +243,8 @@ class TimelineBuilder:
         text: str,
         speaker: str,
         session_id: str = "",
-        session_date: Optional[datetime] = None,
-    ) -> List[TimelineEvent]:
+        session_date: datetime | None = None,
+    ) -> list[TimelineEvent]:
         """Process a message and extract timeline events."""
         events = []
         text_lower = text.lower()
@@ -263,10 +285,10 @@ class TimelineBuilder:
         if duration:
             # Create a duration-based state
             for pattern, attr in self.STATE_PATTERNS:
-                if attr == 'friends_duration' and 'friend' in text_lower:
+                if attr == "friends_duration" and "friend" in text_lower:
                     state = EntityState(
                         entity=speaker.lower(),
-                        attribute='friends_duration',
+                        attribute="friends_duration",
                         value=duration,
                     )
                     timeline.add_state(state)
@@ -276,21 +298,21 @@ class TimelineBuilder:
 
         return events
 
-    def _extract_absolute_date(self, text: str) -> Optional[datetime]:
+    def _extract_absolute_date(self, text: str) -> datetime | None:
         """Extract absolute date from text."""
         for pattern, fmt in self.ABSOLUTE_DATE_PATTERNS:
             match = re.search(pattern, text)
             if match:
                 try:
-                    if fmt == 'dmy':
+                    if fmt == "dmy":
                         day, month_name, year = match.groups()
                         month = self.MONTH_MAP.get(month_name.lower(), 1)
                         return datetime(int(year), month, int(day))
-                    elif fmt == 'mdy':
+                    elif fmt == "mdy":
                         month_name, day, year = match.groups()
                         month = self.MONTH_MAP.get(month_name.lower(), 1)
                         return datetime(int(year), month, int(day))
-                    elif fmt == 'year_only':
+                    elif fmt == "year_only":
                         year = match.group(1)
                         # Only use if it looks like a year (2020-2025 range)
                         if 2015 <= int(year) <= 2030:
@@ -299,14 +321,14 @@ class TimelineBuilder:
                     pass
         return None
 
-    def _extract_relative_date(self, text: str) -> Optional[int]:
+    def _extract_relative_date(self, text: str) -> int | None:
         """Extract relative date offset in days."""
         for pattern, days in self.RELATIVE_DATE_PATTERNS:
             if re.search(pattern, text):
                 return days
         return None
 
-    def _extract_duration(self, text: str) -> Optional[str]:
+    def _extract_duration(self, text: str) -> str | None:
         """Extract duration information."""
         for pattern in self.DURATION_PATTERNS:
             match = re.search(pattern, text)
@@ -323,7 +345,7 @@ class TimelineBuilder:
         text: str,
         speaker: str,
         timeline: EntityTimeline,
-        session_date: Optional[datetime],
+        session_date: datetime | None,
     ) -> None:
         """Extract state information from text."""
         for pattern, attr in self.STATE_PATTERNS:
@@ -342,7 +364,7 @@ class TimelineBuilder:
         self,
         question: str,
         target_entity: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         INNOVATION: Answer temporal questions by timeline graph traversal.
 
@@ -355,7 +377,7 @@ class TimelineBuilder:
         q_lower = question.lower()
 
         # "When did X happen?" questions
-        when_match = re.search(r'when did (?:\w+\s+)?(\w+(?:\s+\w+){0,5})', q_lower)
+        when_match = re.search(r"when did (?:\w+\s+)?(\w+(?:\s+\w+){0,5})", q_lower)
         if when_match:
             activity = when_match.group(1)
             # Search events for matching activity
@@ -365,17 +387,19 @@ class TimelineBuilder:
                         return event.absolute_date.strftime("%d %B %Y")
 
         # "How long has X been/had Y?" questions
-        how_long_match = re.search(r'how long (?:has|have) (?:\w+\s+)?(?:been\s+)?(?:had\s+)?(\w+)', q_lower)
+        how_long_match = re.search(
+            r"how long (?:has|have) (?:\w+\s+)?(?:been\s+)?(?:had\s+)?(\w+)", q_lower
+        )
         if how_long_match:
             attr = how_long_match.group(1)
             # Check states
             for state in timeline.states:
                 if attr in state.attribute.lower() or attr in state.value.lower():
-                    if state.value and ('year' in state.value or 'month' in state.value):
+                    if state.value and ("year" in state.value or "month" in state.value):
                         return state.value
 
         # "How long ago was X?" questions
-        ago_match = re.search(r'how long ago (?:was|did)', q_lower)
+        ago_match = re.search(r"how long ago (?:was|did)", q_lower)
         if ago_match:
             # Search for relevant event with date
             for event in timeline.events.values():
@@ -390,9 +414,9 @@ class TimelineBuilder:
 
         # Check for duration states
         for state in timeline.states:
-            if 'duration' in state.attribute or 'years' in str(state.value):
+            if "duration" in state.attribute or "years" in str(state.value):
                 # Check if question relates to this state
-                if any(word in q_lower for word in state.attribute.split('_')):
+                if any(word in q_lower for word in state.attribute.split("_")):
                     return state.value
 
         return None
@@ -411,7 +435,11 @@ class TimelineBuilder:
             for eid in timeline.event_order:
                 event = timeline.events.get(eid)
                 if event:
-                    date_str = event.absolute_date.strftime("%d %b %Y") if event.absolute_date else "unknown date"
+                    date_str = (
+                        event.absolute_date.strftime("%d %b %Y")
+                        if event.absolute_date
+                        else "unknown date"
+                    )
                     parts.append(f"- [{date_str}] {event.description}")
 
         # Current states

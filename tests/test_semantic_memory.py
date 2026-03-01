@@ -1,6 +1,6 @@
 """Tests for SemanticMemoryStore: fact storage with contradiction tracking."""
 
-from zerogmem.memory.semantic import SemanticMemoryStore, Fact
+from zerogmem.memory.semantic import Fact
 
 
 class TestFact:
@@ -38,8 +38,11 @@ class TestFact:
 
     def test_is_reliable_positive(self):
         fact = Fact(
-            subject="A", predicate="p", object="o",
-            confidence=0.8, sources=["s1", "s2"],
+            subject="A",
+            predicate="p",
+            object="o",
+            confidence=0.8,
+            sources=["s1", "s2"],
         )
         assert fact.is_reliable is True
 
@@ -53,7 +56,9 @@ class TestFact:
 
     def test_is_reliable_false_more_contradictions(self):
         fact = Fact(
-            subject="A", predicate="p", object="o",
+            subject="A",
+            predicate="p",
+            object="o",
             confidence=0.8,
             sources=["s1"],
             contradictions=["c1", "c2"],

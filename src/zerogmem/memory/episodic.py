@@ -10,20 +10,22 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any
+
 import numpy as np
 
 
 @dataclass
 class EpisodeMessage:
     """A single message/turn within an episode."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     speaker: str = ""
     content: str = ""
     timestamp: datetime = field(default_factory=datetime.now)
-    entities_mentioned: List[str] = field(default_factory=list)
+    entities_mentioned: list[str] = field(default_factory=list)
     sentiment: float = 0.0  # -1 to 1
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -33,6 +35,7 @@ class Episode:
 
     Key design: Keeps BOTH summary AND detailed trace for lossless memory.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
     # High-level information
@@ -40,43 +43,43 @@ class Episode:
     title: str = ""  # Short descriptive title
 
     # Detailed trace (lossless storage)
-    messages: List[EpisodeMessage] = field(default_factory=list)
+    messages: list[EpisodeMessage] = field(default_factory=list)
 
     # Temporal information
     start_time: datetime = field(default_factory=datetime.now)
-    end_time: Optional[datetime] = None
-    session_id: Optional[str] = None
+    end_time: datetime | None = None
+    session_id: str | None = None
 
     # Participants and context
-    participants: List[str] = field(default_factory=list)  # Entity IDs
-    participant_names: List[str] = field(default_factory=list)
-    location: Optional[str] = None
-    topics: List[str] = field(default_factory=list)
+    participants: list[str] = field(default_factory=list)  # Entity IDs
+    participant_names: list[str] = field(default_factory=list)
+    location: str | None = None
+    topics: list[str] = field(default_factory=list)
 
     # Emotional and importance markers
     emotional_valence: float = 0.0  # -1 (negative) to 1 (positive)
     importance: float = 0.5  # 0 to 1
 
     # Embeddings
-    summary_embedding: Optional[np.ndarray] = None
-    full_embedding: Optional[np.ndarray] = None  # Embedding of full trace
+    summary_embedding: np.ndarray | None = None
+    full_embedding: np.ndarray | None = None  # Embedding of full trace
 
     # Access patterns for consolidation
     retrieval_count: int = 0
-    last_retrieved: Optional[datetime] = None
+    last_retrieved: datetime | None = None
     created_at: datetime = field(default_factory=datetime.now)
 
     # Key facts extracted from this episode
-    extracted_facts: List[str] = field(default_factory=list)
+    extracted_facts: list[str] = field(default_factory=list)
 
     # Cold storage reference (for compression)
     archived: bool = False
-    archive_ref: Optional[str] = None
+    archive_ref: str | None = None
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
-    def duration(self) -> Optional[timedelta]:
+    def duration(self) -> timedelta | None:
         """Get episode duration."""
         if self.end_time:
             return self.end_time - self.start_time
@@ -94,7 +97,7 @@ class Episode:
             lines.append(f"{msg.speaker}: {msg.content}")
         return "\n".join(lines)
 
-    def get_text_window(self, start_idx: int = 0, end_idx: Optional[int] = None) -> str:
+    def get_text_window(self, start_idx: int = 0, end_idx: int | None = None) -> str:
         """Get a window of the conversation."""
         messages = self.messages[start_idx:end_idx]
         lines = []
@@ -128,18 +131,18 @@ class EpisodicMemory:
     - Support archival of old episodes (lossless compression)
     """
 
-    def __init__(self):
-        self.episodes: Dict[str, Episode] = {}
+    def __init__(self) -> None:
+        self.episodes: dict[str, Episode] = {}
 
         # Indexes for efficient retrieval
-        self._time_index: Dict[str, List[str]] = {}  # date_str -> episode_ids
-        self._participant_index: Dict[str, set] = {}  # participant -> episode_ids
-        self._topic_index: Dict[str, set] = {}  # topic -> episode_ids
-        self._session_index: Dict[str, List[str]] = {}  # session_id -> episode_ids
+        self._time_index: dict[str, list[str]] = {}  # date_str -> episode_ids
+        self._participant_index: dict[str, set] = {}  # participant -> episode_ids
+        self._topic_index: dict[str, set] = {}  # topic -> episode_ids
+        self._session_index: dict[str, list[str]] = {}  # session_id -> episode_ids
 
         # Embeddings for similarity search
-        self._embeddings: List[np.ndarray] = []
-        self._embedding_ids: List[str] = []
+        self._embeddings: list[np.ndarray] = []
+        self._embedding_ids: list[str] = []
 
     def add_episode(self, episode: Episode) -> str:
         """Add an episode to memory."""
@@ -176,7 +179,7 @@ class EpisodicMemory:
 
         return episode.id
 
-    def get_episode(self, episode_id: str, mark_retrieved: bool = True) -> Optional[Episode]:
+    def get_episode(self, episode_id: str, mark_retrieved: bool = True) -> Episode | None:
         """Get an episode by ID."""
         episode = self.episodes.get(episode_id)
         if episode and mark_retrieved:
@@ -184,11 +187,8 @@ class EpisodicMemory:
         return episode
 
     def get_by_time_range(
-        self,
-        start: datetime,
-        end: datetime,
-        participants: Optional[List[str]] = None
-    ) -> List[Episode]:
+        self, start: datetime, end: datetime, participants: list[str] | None = None
+    ) -> list[Episode]:
         """Get episodes within a time range."""
         results = []
 
@@ -210,7 +210,8 @@ class EpisodicMemory:
         if participants:
             participant_set = set(participants)
             results = [
-                ep for ep in results
+                ep
+                for ep in results
                 if participant_set.intersection(ep.participants + ep.participant_names)
             ]
 
@@ -218,43 +219,31 @@ class EpisodicMemory:
         results.sort(key=lambda e: e.start_time)
         return results
 
-    def get_by_participant(self, participant: str, limit: int = 50) -> List[Episode]:
+    def get_by_participant(self, participant: str, limit: int = 50) -> list[Episode]:
         """Get episodes involving a participant."""
         episode_ids = self._participant_index.get(participant, set())
-        episodes = [
-            self.episodes[eid] for eid in episode_ids
-            if eid in self.episodes
-        ]
+        episodes = [self.episodes[eid] for eid in episode_ids if eid in self.episodes]
         # Sort by time, most recent first
         episodes.sort(key=lambda e: e.start_time, reverse=True)
         return episodes[:limit]
 
-    def get_by_topic(self, topic: str, limit: int = 50) -> List[Episode]:
+    def get_by_topic(self, topic: str, limit: int = 50) -> list[Episode]:
         """Get episodes about a topic."""
         episode_ids = self._topic_index.get(topic, set())
-        episodes = [
-            self.episodes[eid] for eid in episode_ids
-            if eid in self.episodes
-        ]
+        episodes = [self.episodes[eid] for eid in episode_ids if eid in self.episodes]
         episodes.sort(key=lambda e: e.start_time, reverse=True)
         return episodes[:limit]
 
-    def get_by_session(self, session_id: str) -> List[Episode]:
+    def get_by_session(self, session_id: str) -> list[Episode]:
         """Get all episodes from a session."""
         episode_ids = self._session_index.get(session_id, [])
-        episodes = [
-            self.episodes[eid] for eid in episode_ids
-            if eid in self.episodes
-        ]
+        episodes = [self.episodes[eid] for eid in episode_ids if eid in self.episodes]
         episodes.sort(key=lambda e: e.start_time)
         return episodes
 
     def search_similar(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 10,
-        threshold: float = 0.0
-    ) -> List[Tuple[Episode, float]]:
+        self, query_embedding: np.ndarray, top_k: int = 10, threshold: float = 0.0
+    ) -> list[tuple[Episode, float]]:
         """Search for similar episodes by embedding."""
         if not self._embeddings:
             return []
@@ -271,23 +260,21 @@ class EpisodicMemory:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-    def get_recent(self, limit: int = 10) -> List[Episode]:
+    def get_recent(self, limit: int = 10) -> list[Episode]:
         """Get most recent episodes."""
         episodes = list(self.episodes.values())
         episodes.sort(key=lambda e: e.start_time, reverse=True)
         return episodes[:limit]
 
-    def get_most_accessed(self, limit: int = 10) -> List[Episode]:
+    def get_most_accessed(self, limit: int = 10) -> list[Episode]:
         """Get most frequently accessed episodes."""
         episodes = list(self.episodes.values())
         episodes.sort(key=lambda e: e.retrieval_count, reverse=True)
         return episodes[:limit]
 
     def get_candidates_for_consolidation(
-        self,
-        min_retrievals: int = 3,
-        min_age_days: int = 7
-    ) -> List[Episode]:
+        self, min_retrievals: int = 3, min_age_days: int = 7
+    ) -> list[Episode]:
         """
         Get episodes that are candidates for consolidation into semantic memory.
 
@@ -297,7 +284,8 @@ class EpisodicMemory:
         """
         cutoff = datetime.now() - timedelta(days=min_age_days)
         candidates = [
-            ep for ep in self.episodes.values()
+            ep
+            for ep in self.episodes.values()
             if ep.retrieval_count >= min_retrievals and ep.start_time < cutoff
         ]
         return candidates
@@ -374,7 +362,7 @@ class EpisodicMemory:
         archived_penalty = 0.5 if episode.archived else 1.0
         return (0.3 * recency + 0.3 * access + 0.4 * importance) * archived_penalty
 
-    def enforce_capacity(self, max_episodes: int) -> List[Tuple[str, Optional[str]]]:
+    def enforce_capacity(self, max_episodes: int) -> list[tuple[str, str | None]]:
         """Evict lowest-scored episodes if over capacity.
 
         Returns list of (episode_id, session_id) tuples for removed episodes.
@@ -382,10 +370,7 @@ class EpisodicMemory:
         if len(self.episodes) <= max_episodes:
             return []
 
-        scored = [
-            (eid, self._eviction_score(ep))
-            for eid, ep in self.episodes.items()
-        ]
+        scored = [(eid, self._eviction_score(ep)) for eid, ep in self.episodes.items()]
         scored.sort(key=lambda x: x[1])
 
         to_remove = len(self.episodes) - max_episodes
@@ -405,7 +390,7 @@ class EpisodicMemory:
             return 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about episodic memory."""
         if not self.episodes:
             return {
@@ -425,7 +410,7 @@ class EpisodicMemory:
             "archived_episodes": sum(1 for ep in self.episodes.values() if ep.archived),
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize episodic memory.
 
         Note: Embeddings are NOT included. They must be saved separately
@@ -473,9 +458,9 @@ class EpisodicMemory:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
-    ) -> "EpisodicMemory":
+        data: dict[str, Any],
+        embeddings_map: dict[str, np.ndarray] | None = None,
+    ) -> EpisodicMemory:
         """Deserialize episodic memory from dictionary.
 
         Args:
@@ -488,15 +473,17 @@ class EpisodicMemory:
         for ep_data in data.get("episodes", []):
             messages = []
             for msg_data in ep_data.get("messages", []):
-                messages.append(EpisodeMessage(
-                    id=msg_data.get("id", str(uuid.uuid4())),
-                    speaker=msg_data.get("speaker", ""),
-                    content=msg_data.get("content", ""),
-                    timestamp=datetime.fromisoformat(msg_data["timestamp"]),
-                    entities_mentioned=msg_data.get("entities_mentioned", []),
-                    sentiment=msg_data.get("sentiment", 0.0),
-                    metadata=msg_data.get("metadata", {}),
-                ))
+                messages.append(
+                    EpisodeMessage(
+                        id=msg_data.get("id", str(uuid.uuid4())),
+                        speaker=msg_data.get("speaker", ""),
+                        content=msg_data.get("content", ""),
+                        timestamp=datetime.fromisoformat(msg_data["timestamp"]),
+                        entities_mentioned=msg_data.get("entities_mentioned", []),
+                        sentiment=msg_data.get("sentiment", 0.0),
+                        metadata=msg_data.get("metadata", {}),
+                    )
+                )
 
             episode = Episode(
                 id=ep_data["id"],
@@ -505,9 +492,7 @@ class EpisodicMemory:
                 messages=messages,
                 start_time=datetime.fromisoformat(ep_data["start_time"]),
                 end_time=(
-                    datetime.fromisoformat(ep_data["end_time"])
-                    if ep_data.get("end_time")
-                    else None
+                    datetime.fromisoformat(ep_data["end_time"]) if ep_data.get("end_time") else None
                 ),
                 session_id=ep_data.get("session_id"),
                 participants=ep_data.get("participants", []),

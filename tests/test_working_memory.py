@@ -1,9 +1,8 @@
 """Tests for WorkingMemory: attention-based memory with limited capacity."""
 
-import numpy as np
 from datetime import datetime, timedelta
 
-from zerogmem.memory.working import WorkingMemory, WorkingMemoryItem
+from zerogmem.memory.working import WorkingMemoryItem
 
 
 class TestWorkingMemoryItem:
@@ -23,17 +22,13 @@ class TestWorkingMemoryItem:
     def test_decay_reduces_weight(self):
         # Set last_accessed to 10 minutes ago so decay has measurable effect
         past = datetime.now() - timedelta(minutes=10)
-        item = WorkingMemoryItem(
-            id="a", content="test", attention_weight=1.0, last_accessed=past
-        )
+        item = WorkingMemoryItem(id="a", content="test", attention_weight=1.0, last_accessed=past)
         item.decay(rate=0.1, time_factor=1.0)
         assert item.attention_weight < 1.0
 
     def test_decay_floors_at_001(self):
         past = datetime.now() - timedelta(hours=1)
-        item = WorkingMemoryItem(
-            id="a", content="test", attention_weight=0.02, last_accessed=past
-        )
+        item = WorkingMemoryItem(id="a", content="test", attention_weight=0.02, last_accessed=past)
         item.decay(rate=1.0, time_factor=1.0)
         assert item.attention_weight == 0.01
 

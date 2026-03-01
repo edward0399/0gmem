@@ -9,10 +9,10 @@ import pytest
 
 from zerogmem.encoder.encoder import Encoder, EncoderConfig
 
-
 # ---------------------------------------------------------------------------
 # Fake OpenAI exceptions for testing
 # ---------------------------------------------------------------------------
+
 
 class FakeRateLimitError(Exception):
     pass
@@ -73,6 +73,7 @@ def _make_encoder_with_mock(mock_module, mock_client, max_retries=3):
 # ---------------------------------------------------------------------------
 # Encoder retry tests
 # ---------------------------------------------------------------------------
+
 
 class TestEncoderRetry:
     """Tests for retry behavior in Encoder._get_embedding_fn."""
@@ -212,6 +213,7 @@ class TestEncoderRetry:
 # Config tests
 # ---------------------------------------------------------------------------
 
+
 class TestEncoderConfigMaxRetries:
 
     def test_default_value(self):
@@ -227,12 +229,14 @@ class TestEncoderConfigMaxRetries:
 # MCP server env var tests
 # ---------------------------------------------------------------------------
 
+
 class TestMcpServerRetryConfig:
 
     def test_default_max_retries(self, monkeypatch):
         monkeypatch.delenv("ZEROGMEM_API_MAX_RETRIES", raising=False)
         monkeypatch.delenv("ZEROGMEM_EMBEDDING_MODEL", raising=False)
         from zerogmem.mcp_server import _build_configs
+
         encoder_config, _, _ = _build_configs()
         assert encoder_config.max_retries == 3
 
@@ -240,6 +244,7 @@ class TestMcpServerRetryConfig:
         monkeypatch.setenv("ZEROGMEM_API_MAX_RETRIES", "7")
         monkeypatch.delenv("ZEROGMEM_EMBEDDING_MODEL", raising=False)
         from zerogmem.mcp_server import _build_configs
+
         encoder_config, _, _ = _build_configs()
         assert encoder_config.max_retries == 7
 
@@ -247,6 +252,7 @@ class TestMcpServerRetryConfig:
         monkeypatch.setenv("ZEROGMEM_API_MAX_RETRIES", "not_a_number")
         monkeypatch.delenv("ZEROGMEM_EMBEDDING_MODEL", raising=False)
         from zerogmem.mcp_server import _build_configs
+
         with caplog.at_level(logging.WARNING, logger="0gmem-mcp"):
             encoder_config, _, _ = _build_configs()
         assert encoder_config.max_retries == 3

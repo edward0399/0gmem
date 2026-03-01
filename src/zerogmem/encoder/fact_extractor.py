@@ -9,25 +9,27 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
 from enum import Enum
+from typing import Any
 
 
 class FactType(Enum):
     """Types of facts that can be extracted."""
-    IDENTITY = "identity"           # X is a Y
-    ATTRIBUTE = "attribute"         # X has property Y
-    RELATIONSHIP = "relationship"   # X is related to Y
-    LOCATION = "location"           # X is from/in Y
-    ACTIVITY = "activity"           # X does/likes Y
-    PREFERENCE = "preference"       # X likes/dislikes Y
-    EVENT = "event"                 # X did Y
-    STATUS = "status"               # X is Y (status)
+
+    IDENTITY = "identity"  # X is a Y
+    ATTRIBUTE = "attribute"  # X has property Y
+    RELATIONSHIP = "relationship"  # X is related to Y
+    LOCATION = "location"  # X is from/in Y
+    ACTIVITY = "activity"  # X does/likes Y
+    PREFERENCE = "preference"  # X likes/dislikes Y
+    EVENT = "event"  # X did Y
+    STATUS = "status"  # X is Y (status)
 
 
 @dataclass
 class ExtractedFact:
     """A structured fact extracted from text."""
+
     subject: str
     predicate: str
     object: str
@@ -35,10 +37,10 @@ class ExtractedFact:
     confidence: float
     source_text: str
     negated: bool = False
-    valid_from: Optional[int] = None
-    valid_to: Optional[int] = None
+    valid_from: int | None = None
+    valid_to: int | None = None
     polarity: str = "positive"
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_text(self) -> str:
         """Convert to natural language."""
@@ -83,58 +85,108 @@ class FactExtractor:
     # Pattern templates for fact extraction
     PATTERNS = [
         # Identity patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:am|is|are)\s+(?:a|an)\s+(\w+(?:\s+\w+)?(?:\s+woman|\s+man|\s+person)?)",
-         "is", FactType.IDENTITY),
-        (r"(?:i|he|she|they|(\w+))\s+identif(?:y|ies)\s+as\s+(?:a|an)?\s*(\w+(?:\s+\w+)?)",
-         "identifies as", FactType.IDENTITY),
-        (r"(\w+)\s+is\s+(?:a|an)\s+(transgender|trans|cisgender|cis|gay|lesbian|bisexual|queer)(?:\s+\w+)?",
-         "is", FactType.IDENTITY),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:am|is|are)\s+(?:a|an)\s+(\w+(?:\s+\w+)?(?:\s+woman|\s+man|\s+person)?)",
+            "is",
+            FactType.IDENTITY,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+identif(?:y|ies)\s+as\s+(?:a|an)?\s*(\w+(?:\s+\w+)?)",
+            "identifies as",
+            FactType.IDENTITY,
+        ),
+        (
+            r"(\w+)\s+is\s+(?:a|an)\s+(transgender|trans|cisgender|cis|gay|lesbian|bisexual|queer)(?:\s+\w+)?",
+            "is",
+            FactType.IDENTITY,
+        ),
         # Location patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:am|is|are)\s+from\s+(\w+(?:\s+\w+)?)",
-         "is from", FactType.LOCATION),
-        (r"(?:i|he|she|they|(\w+))\s+moved\s+(?:from|to)\s+(\w+(?:\s+\w+)?)",
-         "moved from", FactType.LOCATION),
-        (r"(?:i|he|she|they|(\w+))\s+(?:live|lives)\s+in\s+(\w+(?:\s+\w+)?)",
-         "lives in", FactType.LOCATION),
-        (r"(?:i|he|she|they|(\w+))\s+(?:came|come)\s+from\s+(\w+(?:\s+\w+)?)",
-         "came from", FactType.LOCATION),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:am|is|are)\s+from\s+(\w+(?:\s+\w+)?)",
+            "is from",
+            FactType.LOCATION,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+moved\s+(?:from|to)\s+(\w+(?:\s+\w+)?)",
+            "moved from",
+            FactType.LOCATION,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:live|lives)\s+in\s+(\w+(?:\s+\w+)?)",
+            "lives in",
+            FactType.LOCATION,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:came|come)\s+from\s+(\w+(?:\s+\w+)?)",
+            "came from",
+            FactType.LOCATION,
+        ),
         # Status patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:am|is|are)\s+(single|married|divorced|engaged|in a relationship|employed|unemployed)",
-         "is", FactType.STATUS),
-        (r"(\w+)'s\s+relationship\s+status\s+is\s+(\w+)",
-         "relationship status is", FactType.STATUS),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+"
+            r"(?:am|is|are)\s+"
+            r"(single|married|divorced|engaged"
+            r"|in a relationship"
+            r"|employed|unemployed)",
+            "is",
+            FactType.STATUS,
+        ),
+        (
+            r"(\w+)'s\s+relationship\s+status\s+is\s+(\w+)",
+            "relationship status is",
+            FactType.STATUS,
+        ),
         # Activity patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:like|likes|enjoy|enjoys|love|loves)\s+(\w+(?:ing)?(?:\s+\w+)?)",
-         "likes", FactType.PREFERENCE),
-        (r"(?:i|he|she|they|(\w+))\s+(?:do|does|did)\s+(\w+(?:ing)?(?:\s+\w+)?)",
-         "does", FactType.ACTIVITY),
-        (r"(?:i|he|she|they|(\w+))\s+(?:go|goes|went)\s+(\w+(?:ing)?)",
-         "goes", FactType.ACTIVITY),
-        (r"(?:i|he|she|they|(\w+))\s+signed\s+up\s+for\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
-         "signed up for", FactType.EVENT),
-        (r"(?:i|he|she|they|(\w+))\s+(?:research|researched)\s+(\w+(?:\s+\w+)?)",
-         "researched", FactType.EVENT),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:like|likes|enjoy|enjoys|love|loves)\s+(\w+(?:ing)?(?:\s+\w+)?)",
+            "likes",
+            FactType.PREFERENCE,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:do|does|did)\s+(\w+(?:ing)?(?:\s+\w+)?)",
+            "does",
+            FactType.ACTIVITY,
+        ),
+        (r"(?:i|he|she|they|(\w+))\s+(?:go|goes|went)\s+(\w+(?:ing)?)", "goes", FactType.ACTIVITY),
+        (
+            r"(?:i|he|she|they|(\w+))\s+signed\s+up\s+for\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
+            "signed up for",
+            FactType.EVENT,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:research|researched)\s+(\w+(?:\s+\w+)?)",
+            "researched",
+            FactType.EVENT,
+        ),
         # Preference patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:hate|hates|dislike|dislikes)\s+(\w+(?:\s+\w+)?)",
-         "dislikes", FactType.PREFERENCE),
-        (r"(?:my|his|her|their|(\w+)'s)\s+(?:favorite|favourite)\s+(\w+)\s+is\s+(\w+(?:\s+\w+)?)",
-         "favorite is", FactType.PREFERENCE),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:hate|hates|dislike|dislikes)\s+(\w+(?:\s+\w+)?)",
+            "dislikes",
+            FactType.PREFERENCE,
+        ),
+        (
+            r"(?:my|his|her|their|(\w+)'s)\s+(?:favorite|favourite)\s+(\w+)\s+is\s+(\w+(?:\s+\w+)?)",
+            "favorite is",
+            FactType.PREFERENCE,
+        ),
         # Career/Education patterns
-        (r"(?:i|he|she|they|(\w+))\s+(?:want|wants|decided)\s+to\s+(?:pursue|study|become)\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
-         "wants to pursue", FactType.EVENT),
-        (r"(?:i|he|she|they|(\w+))\s+(?:work|works)\s+(?:as|in)\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
-         "works as", FactType.ATTRIBUTE),
-
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:want|wants|decided)\s+to\s+(?:pursue|study|become)\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
+            "wants to pursue",
+            FactType.EVENT,
+        ),
+        (
+            r"(?:i|he|she|they|(\w+))\s+(?:work|works)\s+(?:as|in)\s+(?:a\s+)?(\w+(?:\s+\w+)?)",
+            "works as",
+            FactType.ATTRIBUTE,
+        ),
         # Attribute patterns
-        (r"(\w+)'s\s+(\w+)\s+(?:is|are)\s+(\w+(?:\s+\w+)?)",
-         "has", FactType.ATTRIBUTE),
-        (r"(?:my|his|her|their|(\w+)'s)\s+kids?\s+(?:like|likes|love|loves)\s+(\w+(?:\s+\w+)?)",
-         "kids like", FactType.PREFERENCE),
+        (r"(\w+)'s\s+(\w+)\s+(?:is|are)\s+(\w+(?:\s+\w+)?)", "has", FactType.ATTRIBUTE),
+        (
+            r"(?:my|his|her|their|(\w+)'s)\s+kids?\s+(?:like|likes|love|loves)\s+(\w+(?:\s+\w+)?)",
+            "kids like",
+            FactType.PREFERENCE,
+        ),
     ]
 
     # Keywords that indicate the subject when pronouns are used
@@ -150,7 +202,7 @@ class FactExtractor:
         "their": "they",
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.compiled_patterns = [
             (re.compile(pattern, re.IGNORECASE), predicate, fact_type)
             for pattern, predicate, fact_type in self.PATTERNS
@@ -159,9 +211,9 @@ class FactExtractor:
     def extract_facts(
         self,
         text: str,
-        speaker: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[ExtractedFact]:
+        speaker: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> list[ExtractedFact]:
         """
         Extract structured facts from text.
 
@@ -174,7 +226,7 @@ class FactExtractor:
             List of extracted facts
         """
         facts = []
-        text_lower = text.lower()
+        text.lower()
 
         for pattern, predicate, fact_type in self.compiled_patterns:
             for match in pattern.finditer(text):
@@ -202,7 +254,7 @@ class FactExtractor:
                     continue
 
                 # Clean up extracted values
-                subject = subject.strip().title() if subject else speaker
+                subject = subject.strip().title() if subject else (speaker or "")
                 obj = obj.strip()
 
                 # Check for negation
@@ -228,25 +280,44 @@ class FactExtractor:
     def _is_negated(self, text: str, position: int) -> bool:
         """Check if the text around position contains negation."""
         # Look for negation words before the position
-        before_text = text[max(0, position - 50):position].lower()
-        negation_words = ["not", "never", "don't", "doesn't", "didn't", "won't", "can't", "couldn't", "no"]
+        before_text = text[max(0, position - 50) : position].lower()
+        negation_words = [
+            "not",
+            "never",
+            "don't",
+            "doesn't",
+            "didn't",
+            "won't",
+            "can't",
+            "couldn't",
+            "no",
+        ]
         return any(word in before_text for word in negation_words)
 
-    def _extract_kv_facts(self, text: str, speaker: Optional[str]) -> List[ExtractedFact]:
+    def _extract_kv_facts(self, text: str, speaker: str | None) -> list[ExtractedFact]:
         """Extract key-value style facts."""
         facts = []
 
         # Pattern: "X is from Y" style
         kv_patterns = [
             # Activities with specific places
-            (r"(?:i|we|he|she|they|(\w+))\s+(?:went|go|goes)\s+(?:to\s+)?(?:the\s+)?(\w+(?:\s+\w+)?)\s+(?:on|at|in)\s+(\w+(?:\s+\w+)?)",
-             "went to", FactType.EVENT),
+            (
+                r"(?:i|we|he|she|they|(\w+))\s+(?:went|go|goes)\s+(?:to\s+)?(?:the\s+)?(\w+(?:\s+\w+)?)\s+(?:on|at|in)\s+(\w+(?:\s+\w+)?)",
+                "went to",
+                FactType.EVENT,
+            ),
             # Camping locations
-            (r"(?:i|we|he|she|they|(\w+))\s+(?:camp|camped|camping)\s+(?:at|in|on)\s+(?:the\s+)?(\w+(?:\s+\w+)?)",
-             "camped at", FactType.LOCATION),
+            (
+                r"(?:i|we|he|she|they|(\w+))\s+(?:camp|camped|camping)\s+(?:at|in|on)\s+(?:the\s+)?(\w+(?:\s+\w+)?)",
+                "camped at",
+                FactType.LOCATION,
+            ),
             # Beach, mountains, forest mentions
-            (r"(?:camp|camped|camping)\s+(?:at|in|on|near)\s+(?:the\s+)?(beach|mountain|mountains|forest|lake|river)",
-             "camped at", FactType.LOCATION),
+            (
+                r"(?:camp|camped|camping)\s+(?:at|in|on|near)\s+(?:the\s+)?(beach|mountain|mountains|forest|lake|river)",
+                "camped at",
+                FactType.LOCATION,
+            ),
         ]
 
         for pattern, predicate, fact_type in kv_patterns:
@@ -257,14 +328,16 @@ class FactExtractor:
                 obj = groups[-1] if groups[-1] else groups[-2] if len(groups) > 1 else None
 
                 if subject and obj:
-                    facts.append(ExtractedFact(
-                        subject=subject.title() if subject else speaker,
-                        predicate=predicate,
-                        object=obj,
-                        fact_type=fact_type,
-                        confidence=0.7,
-                        source_text=text,
-                    ))
+                    facts.append(
+                        ExtractedFact(
+                            subject=subject.title() if subject else (speaker or ""),
+                            predicate=predicate,
+                            object=obj,
+                            fact_type=fact_type,
+                            confidence=0.7,
+                            source_text=text,
+                        )
+                    )
 
         return facts
 
@@ -279,12 +352,12 @@ class FactStore:
     - Query matching
     """
 
-    def __init__(self):
-        self.facts: List[ExtractedFact] = []
-        self.by_subject: Dict[str, List[ExtractedFact]] = {}
-        self.by_predicate: Dict[str, List[ExtractedFact]] = {}
-        self.by_type: Dict[FactType, List[ExtractedFact]] = {}
-        self.by_subject_predicate: Dict[Tuple[str, str], ExtractedFact] = {}
+    def __init__(self) -> None:
+        self.facts: list[ExtractedFact] = []
+        self.by_subject: dict[str, list[ExtractedFact]] = {}
+        self.by_predicate: dict[str, list[ExtractedFact]] = {}
+        self.by_type: dict[FactType, list[ExtractedFact]] = {}
+        self.by_subject_predicate: dict[tuple[str, str], ExtractedFact] = {}
         self.max_turn: int = 0
 
         self._supersedable_types = {
@@ -351,16 +424,16 @@ class FactStore:
             self.by_type[fact.fact_type] = []
         self.by_type[fact.fact_type].append(fact)
 
-    def add_facts(self, facts: List[ExtractedFact]) -> None:
+    def add_facts(self, facts: list[ExtractedFact]) -> None:
         """Add multiple facts."""
         for fact in facts:
             self.add_fact(fact)
 
-    def get_facts_about(self, subject: str) -> List[ExtractedFact]:
+    def get_facts_about(self, subject: str) -> list[ExtractedFact]:
         """Get all facts about a subject."""
         return self.by_subject.get(subject.lower(), [])
 
-    def get_facts_by_type(self, fact_type: FactType) -> List[ExtractedFact]:
+    def get_facts_by_type(self, fact_type: FactType) -> list[ExtractedFact]:
         """Get all facts of a specific type."""
         return self.by_type.get(fact_type, [])
 
@@ -371,7 +444,7 @@ class FactStore:
         prefer_latest: bool = False,
         prefer_positive: bool = False,
         require_negated: bool = False,
-    ) -> List[Tuple[ExtractedFact, float]]:
+    ) -> list[tuple[ExtractedFact, float]]:
         """Search for facts matching a query."""
         scored = []
         for fact in self.facts:
@@ -396,7 +469,7 @@ class FactStore:
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored[:top_k]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get store statistics."""
         return {
             "total_facts": len(self.facts),

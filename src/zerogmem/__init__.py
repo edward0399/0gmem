@@ -28,16 +28,16 @@ __version__ = "0.1.0"
 __author__ = "0G Labs"
 
 # Core classes
-from zerogmem.memory.manager import MemoryManager, MemoryConfig
 from zerogmem.encoder.encoder import Encoder, EncoderConfig
+from zerogmem.memory.manager import MemoryConfig, MemoryManager
+from zerogmem.persistence import load_memory_state, save_memory_state
+from zerogmem.retriever.query_analyzer import QueryAnalysis, QueryAnalyzer
 from zerogmem.retriever.retriever import (
+    RetrievalResponse,
+    RetrievalResult,
     Retriever,
     RetrieverConfig,
-    RetrievalResult,
-    RetrievalResponse,
 )
-from zerogmem.retriever.query_analyzer import QueryAnalyzer, QueryAnalysis
-from zerogmem.persistence import save_memory_state, load_memory_state
 
 __all__ = [
     # Core orchestrators

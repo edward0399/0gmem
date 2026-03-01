@@ -7,34 +7,36 @@ Critical for LoCoMo's temporal reasoning questions.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
 from enum import Enum
+from typing import Any
 
 
 class TemporalType(Enum):
     """Types of temporal expressions."""
-    ABSOLUTE = "absolute"      # "January 15, 2024"
-    RELATIVE = "relative"      # "yesterday", "last week"
-    DURATION = "duration"      # "for 3 hours"
-    FREQUENCY = "frequency"    # "every Monday"
-    SEQUENCE = "sequence"      # "before", "after", "then"
-    RANGE = "range"           # "from Monday to Friday"
+
+    ABSOLUTE = "absolute"  # "January 15, 2024"
+    RELATIVE = "relative"  # "yesterday", "last week"
+    DURATION = "duration"  # "for 3 hours"
+    FREQUENCY = "frequency"  # "every Monday"
+    SEQUENCE = "sequence"  # "before", "after", "then"
+    RANGE = "range"  # "from Monday to Friday"
 
 
 @dataclass
 class TemporalExpression:
     """A detected temporal expression."""
-    text: str                           # Original text
+
+    text: str  # Original text
     type: TemporalType
-    normalized_start: Optional[datetime] = None
-    normalized_end: Optional[datetime] = None
-    duration: Optional[timedelta] = None
-    relation: Optional[str] = None      # before, after, during, etc.
-    reference_event: Optional[str] = None  # What this is relative to
+    normalized_start: datetime | None = None
+    normalized_end: datetime | None = None
+    duration: timedelta | None = None
+    relation: str | None = None  # before, after, during, etc.
+    reference_event: str | None = None  # What this is relative to
     confidence: float = 1.0
-    span: Tuple[int, int] = (0, 0)     # Character positions in text
+    span: tuple[int, int] = (0, 0)  # Character positions in text
 
 
 class TemporalExtractor:
@@ -122,7 +124,7 @@ class TemporalExtractor:
         r"\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM|am|pm)?",
     ]
 
-    def __init__(self, reference_time: Optional[datetime] = None):
+    def __init__(self, reference_time: datetime | None = None):
         """
         Initialize the temporal extractor.
 
@@ -136,7 +138,7 @@ class TemporalExtractor:
         """Update the reference time for relative expressions."""
         self.reference_time = reference_time
 
-    def extract(self, text: str) -> List[TemporalExpression]:
+    def extract(self, text: str) -> list[TemporalExpression]:
         """
         Extract all temporal expressions from text.
 
@@ -168,10 +170,10 @@ class TemporalExtractor:
 
         return expressions
 
-    def _extract_absolute(self, text: str) -> List[TemporalExpression]:
+    def _extract_absolute(self, text: str) -> list[TemporalExpression]:
         """Extract absolute date/time expressions."""
         expressions = []
-        text_lower = text.lower()
+        text.lower()
 
         for pattern in self.ABSOLUTE_PATTERNS:
             for match in re.finditer(pattern, text, re.IGNORECASE):
@@ -188,13 +190,13 @@ class TemporalExtractor:
 
         return expressions
 
-    def _extract_relative(self, text: str) -> List[TemporalExpression]:
+    def _extract_relative(self, text: str) -> list[TemporalExpression]:
         """Extract relative time expressions."""
         expressions = []
         text_lower = text.lower()
 
         for phrase, (offset, unit) in self.RELATIVE_PATTERNS.items():
-            pattern = r'\b' + re.escape(phrase) + r'\b'
+            pattern = r"\b" + re.escape(phrase) + r"\b"
             for match in re.finditer(pattern, text_lower):
                 normalized = self._resolve_relative(offset, unit)
                 expr = TemporalExpression(
@@ -207,7 +209,7 @@ class TemporalExtractor:
 
         return expressions
 
-    def _extract_durations(self, text: str) -> List[TemporalExpression]:
+    def _extract_durations(self, text: str) -> list[TemporalExpression]:
         """Extract duration expressions."""
         expressions = []
 
@@ -229,13 +231,13 @@ class TemporalExtractor:
 
         return expressions
 
-    def _extract_sequences(self, text: str) -> List[TemporalExpression]:
+    def _extract_sequences(self, text: str) -> list[TemporalExpression]:
         """Extract sequence/ordering expressions."""
         expressions = []
         text_lower = text.lower()
 
         for word, relation in self.SEQUENCE_WORDS.items():
-            pattern = r'\b' + re.escape(word) + r'\b'
+            pattern = r"\b" + re.escape(word) + r"\b"
             for match in re.finditer(pattern, text_lower):
                 expr = TemporalExpression(
                     text=match.group(),
@@ -247,7 +249,7 @@ class TemporalExtractor:
 
         return expressions
 
-    def _extract_frequencies(self, text: str) -> List[TemporalExpression]:
+    def _extract_frequencies(self, text: str) -> list[TemporalExpression]:
         """Extract frequency expressions."""
         expressions = []
 
@@ -290,7 +292,7 @@ class TemporalExtractor:
 
     def _create_duration(self, amount: int, unit: str) -> timedelta:
         """Create a timedelta from amount and unit."""
-        unit = unit.lower().rstrip('s')  # Remove plural
+        unit = unit.lower().rstrip("s")  # Remove plural
 
         if unit == "second":
             return timedelta(seconds=amount)
@@ -309,7 +311,7 @@ class TemporalExtractor:
         else:
             return timedelta()
 
-    def _parse_absolute_date(self, text: str) -> Optional[datetime]:
+    def _parse_absolute_date(self, text: str) -> datetime | None:
         """Parse an absolute date string to datetime."""
         formats = [
             "%Y-%m-%d",
@@ -330,63 +332,78 @@ class TemporalExtractor:
 
         return None
 
-    def get_temporal_context(self, expressions: List[TemporalExpression]) -> Dict[str, Any]:
+    def get_temporal_context(self, expressions: list[TemporalExpression]) -> dict[str, Any]:
         """
         Analyze extracted expressions to build temporal context.
 
         Returns structured temporal information for memory encoding.
         """
-        context = {
-            "has_temporal_info": len(expressions) > 0,
-            "absolute_times": [],
-            "relative_times": [],
-            "durations": [],
-            "sequences": [],
-            "frequencies": [],
-            "earliest_time": None,
-            "latest_time": None,
-        }
+        absolute_times: list[dict[str, Any]] = []
+        relative_times: list[dict[str, Any]] = []
+        durations: list[dict[str, Any]] = []
+        sequences: list[dict[str, Any]] = []
+        frequencies: list[dict[str, Any]] = []
 
-        times = []
+        times: list[datetime] = []
 
         for expr in expressions:
             if expr.type == TemporalType.ABSOLUTE:
-                context["absolute_times"].append({
-                    "text": expr.text,
-                    "normalized": expr.normalized_start.isoformat() if expr.normalized_start else None,
-                })
+                absolute_times.append(
+                    {
+                        "text": expr.text,
+                        "normalized": (
+                            expr.normalized_start.isoformat() if expr.normalized_start else None
+                        ),
+                    }
+                )
                 if expr.normalized_start:
                     times.append(expr.normalized_start)
 
             elif expr.type == TemporalType.RELATIVE:
-                context["relative_times"].append({
-                    "text": expr.text,
-                    "normalized": expr.normalized_start.isoformat() if expr.normalized_start else None,
-                })
+                relative_times.append(
+                    {
+                        "text": expr.text,
+                        "normalized": (
+                            expr.normalized_start.isoformat() if expr.normalized_start else None
+                        ),
+                    }
+                )
                 if expr.normalized_start:
                     times.append(expr.normalized_start)
 
             elif expr.type == TemporalType.DURATION:
-                context["durations"].append({
-                    "text": expr.text,
-                    "seconds": expr.duration.total_seconds() if expr.duration else 0,
-                })
+                durations.append(
+                    {
+                        "text": expr.text,
+                        "seconds": expr.duration.total_seconds() if expr.duration else 0,
+                    }
+                )
 
             elif expr.type == TemporalType.SEQUENCE:
-                context["sequences"].append({
-                    "text": expr.text,
-                    "relation": expr.relation,
-                })
+                sequences.append(
+                    {
+                        "text": expr.text,
+                        "relation": expr.relation,
+                    }
+                )
 
             elif expr.type == TemporalType.FREQUENCY:
-                context["frequencies"].append({
-                    "text": expr.text,
-                    "type": expr.relation,
-                })
+                frequencies.append(
+                    {
+                        "text": expr.text,
+                        "type": expr.relation,
+                    }
+                )
 
-        # Compute time bounds
-        if times:
-            context["earliest_time"] = min(times).isoformat()
-            context["latest_time"] = max(times).isoformat()
+        context: dict[str, Any] = {
+            "has_temporal_info": len(expressions) > 0,
+            "absolute_times": absolute_times,
+            "relative_times": relative_times,
+            "durations": durations,
+            "sequences": sequences,
+            "frequencies": frequencies,
+            "earliest_time": min(times).isoformat() if times else None,
+            "latest_time": max(times).isoformat() if times else None,
+        }
 
         return context

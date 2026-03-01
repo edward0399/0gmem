@@ -15,16 +15,19 @@ This dramatically improves single-hop accuracy.
 
 from __future__ import annotations
 
-import numpy as np
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any, Tuple, Callable
+from typing import Any
+
+import numpy as np
 
 
 @dataclass
 class ProfileMatch:
     """A match between a question and a profile fact."""
+
     fact_type: str
-    fact_values: List[str]
+    fact_values: list[str]
     similarity_score: float
     matched_text: str
 
@@ -147,7 +150,7 @@ class SemanticProfileMatcher:
         ],
     }
 
-    def __init__(self, embedding_fn: Optional[Callable[[str], np.ndarray]] = None):
+    def __init__(self, embedding_fn: Callable[[str], np.ndarray] | None = None):
         """
         Initialize the matcher.
 
@@ -155,8 +158,8 @@ class SemanticProfileMatcher:
             embedding_fn: Function to compute embeddings
         """
         self.embedding_fn = embedding_fn
-        self.fact_type_embeddings: Dict[str, np.ndarray] = {}
-        self._pattern_cache: Dict[str, np.ndarray] = {}
+        self.fact_type_embeddings: dict[str, np.ndarray] = {}
+        self._pattern_cache: dict[str, np.ndarray] = {}
 
     def precompute_embeddings(self) -> None:
         """Precompute embeddings for all fact type patterns."""
@@ -178,9 +181,9 @@ class SemanticProfileMatcher:
     def match_question_to_profile(
         self,
         question: str,
-        profile: Dict[str, List[str]],
+        profile: dict[str, list[str]],
         top_k: int = 3,
-    ) -> List[ProfileMatch]:
+    ) -> list[ProfileMatch]:
         """
         Match a question to relevant profile facts using semantic similarity.
 
@@ -199,10 +202,12 @@ class SemanticProfileMatcher:
     def _semantic_match(
         self,
         question: str,
-        profile: Dict[str, List[str]],
+        profile: dict[str, list[str]],
         top_k: int,
-    ) -> List[ProfileMatch]:
+    ) -> list[ProfileMatch]:
         """Match using semantic similarity."""
+        if not self.embedding_fn:
+            return []
         # Get question embedding
         q_embed = self.embedding_fn(question)
 
@@ -220,12 +225,14 @@ class SemanticProfileMatcher:
             )
 
             if similarity > 0.3:  # Threshold
-                matches.append(ProfileMatch(
-                    fact_type=fact_type,
-                    fact_values=values,
-                    similarity_score=float(similarity),
-                    matched_text=", ".join(values),
-                ))
+                matches.append(
+                    ProfileMatch(
+                        fact_type=fact_type,
+                        fact_values=values,
+                        similarity_score=float(similarity),
+                        matched_text=", ".join(values),
+                    )
+                )
 
         # Sort by similarity
         matches.sort(key=lambda m: m.similarity_score, reverse=True)
@@ -234,9 +241,9 @@ class SemanticProfileMatcher:
     def _keyword_match(
         self,
         question: str,
-        profile: Dict[str, List[str]],
+        profile: dict[str, list[str]],
         top_k: int,
-    ) -> List[ProfileMatch]:
+    ) -> list[ProfileMatch]:
         """Match using keyword overlap."""
         q_lower = question.lower()
         q_words = set(q_lower.split())
@@ -245,7 +252,7 @@ class SemanticProfileMatcher:
         for fact_type, values in profile.items():
             # Check patterns for this fact type
             patterns = self.FACT_TYPE_PATTERNS.get(fact_type, [])
-            best_score = 0
+            best_score = 0.0
 
             for pattern in patterns:
                 pattern_words = set(pattern.split())
@@ -260,12 +267,14 @@ class SemanticProfileMatcher:
                 best_score = max(best_score, direct_overlap / len(fact_words))
 
             if best_score > 0.2:
-                matches.append(ProfileMatch(
-                    fact_type=fact_type,
-                    fact_values=values,
-                    similarity_score=best_score,
-                    matched_text=", ".join(values),
-                ))
+                matches.append(
+                    ProfileMatch(
+                        fact_type=fact_type,
+                        fact_values=values,
+                        similarity_score=best_score,
+                        matched_text=", ".join(values),
+                    )
+                )
 
         matches.sort(key=lambda m: m.similarity_score, reverse=True)
         return matches[:top_k]
@@ -273,8 +282,8 @@ class SemanticProfileMatcher:
     def answer_from_semantic_match(
         self,
         question: str,
-        profile: Dict[str, List[str]],
-    ) -> Optional[str]:
+        profile: dict[str, list[str]],
+    ) -> str | None:
         """
         INNOVATION: Answer a question by finding semantically matching profile facts.
 
@@ -305,14 +314,14 @@ class AdaptiveProfileAnswerer:
 
     def __init__(
         self,
-        embedding_fn: Optional[Callable[[str], np.ndarray]] = None,
-        llm_client: Optional[Any] = None,
+        embedding_fn: Callable[[str], np.ndarray] | None = None,
+        llm_client: Any | None = None,
     ):
         self.semantic_matcher = SemanticProfileMatcher(embedding_fn)
         self._client = llm_client
         self._inference_rules = self._build_inference_rules()
 
-    def _build_inference_rules(self) -> Dict[str, List[Tuple[str, str]]]:
+    def _build_inference_rules(self) -> dict[str, list[tuple[str, str]]]:
         """Build rules for inferring facts from other facts."""
         return {
             # If we know X, we can infer Y
@@ -324,9 +333,9 @@ class AdaptiveProfileAnswerer:
     def answer(
         self,
         question: str,
-        profile: Dict[str, List[str]],
+        profile: dict[str, list[str]],
         target_entity: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Answer a question using adaptive profile matching.
 
@@ -352,7 +361,7 @@ class AdaptiveProfileAnswerer:
 
         return None
 
-    def _direct_match(self, question: str, profile: Dict[str, List[str]]) -> Optional[str]:
+    def _direct_match(self, question: str, profile: dict[str, list[str]]) -> str | None:
         """Direct keyword matching (existing logic from llm_fact_extractor)."""
         q_lower = question.lower()
 
@@ -415,7 +424,7 @@ class AdaptiveProfileAnswerer:
 
         return None
 
-    def _infer_answer(self, question: str, profile: Dict[str, List[str]]) -> Optional[str]:
+    def _infer_answer(self, question: str, profile: dict[str, list[str]]) -> str | None:
         """Infer answer from related facts."""
         q_lower = question.lower()
 
@@ -425,7 +434,9 @@ class AdaptiveProfileAnswerer:
             for key in ["art", "painted", "activity"]:
                 if key in profile:
                     for val in profile[key]:
-                        if any(w in val.lower() for w in ["paint", "pottery", "art", "draw", "create"]):
+                        if any(
+                            w in val.lower() for w in ["paint", "pottery", "art", "draw", "create"]
+                        ):
                             creative.append(val)
             if creative:
                 return ", ".join(set(creative))

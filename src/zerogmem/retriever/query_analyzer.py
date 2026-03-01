@@ -8,58 +8,61 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional, List, Dict, Any
 from enum import Enum
+from typing import Any
 
-from zerogmem.encoder.temporal_extractor import TemporalExtractor, TemporalExpression
+from zerogmem.encoder.temporal_extractor import TemporalExpression, TemporalExtractor
 
 
 class QueryIntent(Enum):
     """Types of query intents."""
-    FACTUAL = "factual"           # "What is X's favorite color?"
-    TEMPORAL = "temporal"         # "When did X happen?"
-    CAUSAL = "causal"            # "Why did X happen?"
-    RELATIONAL = "relational"    # "Who does X know?"
-    PREFERENCE = "preference"     # "Does X like Y?"
-    EVENT = "event"              # "What happened at/during X?"
-    COMPARISON = "comparison"    # "How is X different from Y?"
-    LIST = "list"                # "List all X that Y"
-    VERIFICATION = "verification" # "Is it true that X?"
+
+    FACTUAL = "factual"  # "What is X's favorite color?"
+    TEMPORAL = "temporal"  # "When did X happen?"
+    CAUSAL = "causal"  # "Why did X happen?"
+    RELATIONAL = "relational"  # "Who does X know?"
+    PREFERENCE = "preference"  # "Does X like Y?"
+    EVENT = "event"  # "What happened at/during X?"
+    COMPARISON = "comparison"  # "How is X different from Y?"
+    LIST = "list"  # "List all X that Y"
+    VERIFICATION = "verification"  # "Is it true that X?"
 
 
 class ReasoningType(Enum):
     """Types of reasoning required."""
-    SINGLE_HOP = "single_hop"    # Direct fact lookup
-    MULTI_HOP = "multi_hop"      # Connecting multiple facts
-    TEMPORAL = "temporal"        # Time-based reasoning
-    CAUSAL = "causal"           # Cause-effect reasoning
+
+    SINGLE_HOP = "single_hop"  # Direct fact lookup
+    MULTI_HOP = "multi_hop"  # Connecting multiple facts
+    TEMPORAL = "temporal"  # Time-based reasoning
+    CAUSAL = "causal"  # Cause-effect reasoning
     COMMONSENSE = "commonsense"  # World knowledge integration
     ADVERSARIAL = "adversarial"  # Testing for false information
 
 
 class TemporalScope(Enum):
     """Temporal scope of the query."""
-    POINT = "point"              # Specific moment
-    RANGE = "range"              # Time range
-    RELATIVE = "relative"        # Before/after something
-    NONE = "none"                # No temporal constraint
+
+    POINT = "point"  # Specific moment
+    RANGE = "range"  # Time range
+    RELATIVE = "relative"  # Before/after something
+    NONE = "none"  # No temporal constraint
 
 
 @dataclass
 class QueryAnalysis:
     """Result of analyzing a query."""
+
     original_query: str
     intent: QueryIntent
     reasoning_type: ReasoningType
-    entities: List[str]
+    entities: list[str]
     temporal_scope: TemporalScope
-    temporal_expressions: List[TemporalExpression]
-    keywords: List[str]
+    temporal_expressions: list[TemporalExpression]
+    keywords: list[str]
     is_negation_check: bool = False  # Is this checking if something is NOT true?
     expected_answer_type: str = "text"  # text, yes_no, list, date, number
     confidence: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class QueryAnalyzer:
@@ -146,11 +149,11 @@ class QueryAnalyzer:
         r"\bwho\b.*\bwho\b",  # Nested questions
         r"\bthen\b.*\bwhat\b",
         r"\bafter that\b",
-        r"\bbased on\b",       # Causal connection
-        r"\baccording to\b",   # Reference to source
-        r"\bexperience\b",     # Personal experience connection
-        r"\brecommend",        # Recommendation (often multi-hop)
-        r"\bcommon\b",         # Comparing multiple things
+        r"\bbased on\b",  # Causal connection
+        r"\baccording to\b",  # Reference to source
+        r"\bexperience\b",  # Personal experience connection
+        r"\brecommend",  # Recommendation (often multi-hop)
+        r"\bcommon\b",  # Comparing multiple things
     ]
 
     TEMPORAL_REASONING_INDICATORS = [
@@ -179,10 +182,10 @@ class QueryAnalyzer:
         r"\bdid not\b",
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.temporal_extractor = TemporalExtractor()
 
-    def analyze(self, query: str, context: Optional[Dict[str, Any]] = None) -> QueryAnalysis:
+    def analyze(self, query: str, context: dict[str, Any] | None = None) -> QueryAnalysis:
         """
         Analyze a query to determine intent and retrieval strategy.
 
@@ -255,7 +258,7 @@ class QueryAnalyzer:
 
         if intent_scores:
             # Return highest scoring intent
-            return max(intent_scores, key=intent_scores.get)
+            return max(intent_scores, key=lambda k: intent_scores[k])
 
         # Default to factual
         return QueryIntent.FACTUAL
@@ -277,20 +280,30 @@ class QueryAnalyzer:
             return ReasoningType.CAUSAL
 
         # Check for commonsense reasoning (comparing/generalizing across contexts)
-        if re.search(r"\bcommon\b|\btypical\b|\busual\b|\bgenerally\b|\bboth\b.*\bcit", query_lower):
+        if re.search(
+            r"\bcommon\b|\btypical\b|\busual\b|\bgenerally\b|\bboth\b.*\bcit", query_lower
+        ):
             return ReasoningType.COMMONSENSE
 
         return ReasoningType.SINGLE_HOP
 
-    def _extract_entities(self, query: str) -> List[str]:
+    def _extract_entities(self, query: str) -> list[str]:
         """Extract entity mentions from query (simplified)."""
         entities = []
 
         # Look for capitalized words (potential names)
-        name_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b'
+        name_pattern = r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b"
         for match in re.finditer(name_pattern, query):
             # Skip common question words
-            if match.group(1).lower() not in ['what', 'when', 'where', 'who', 'why', 'how', 'which']:
+            if match.group(1).lower() not in [
+                "what",
+                "when",
+                "where",
+                "who",
+                "why",
+                "how",
+                "which",
+            ]:
                 entities.append(match.group(1))
 
         # Look for quoted terms
@@ -301,40 +314,121 @@ class QueryAnalyzer:
 
         return list(set(entities))
 
-    def _extract_keywords(self, query_lower: str) -> List[str]:
+    def _extract_keywords(self, query_lower: str) -> list[str]:
         """Extract important keywords from query."""
         # Remove common stop words
         stop_words = {
-            'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
-            'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
-            'would', 'could', 'should', 'may', 'might', 'must', 'shall',
-            'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in',
-            'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into',
-            'through', 'during', 'before', 'after', 'above', 'below',
-            'between', 'under', 'again', 'further', 'then', 'once',
-            'here', 'there', 'when', 'where', 'why', 'how', 'all',
-            'each', 'few', 'more', 'most', 'other', 'some', 'such',
-            'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than',
-            'too', 'very', 'just', 'and', 'but', 'if', 'or', 'because',
-            'until', 'while', 'about', 'what', 'which', 'who', 'whom',
-            'this', 'that', 'these', 'those', 'am', 'it', 'its',
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "just",
+            "and",
+            "but",
+            "if",
+            "or",
+            "because",
+            "until",
+            "while",
+            "about",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "this",
+            "that",
+            "these",
+            "those",
+            "am",
+            "it",
+            "its",
         }
 
         # Tokenize and filter
-        words = re.findall(r'\b\w+\b', query_lower)
+        words = re.findall(r"\b\w+\b", query_lower)
         keywords = [w for w in words if w not in stop_words and len(w) > 2]
 
         return keywords
 
     def _determine_temporal_scope(
-        self,
-        query_lower: str,
-        temporal_expressions: List[TemporalExpression]
+        self, query_lower: str, temporal_expressions: list[TemporalExpression]
     ) -> TemporalScope:
         """Determine the temporal scope of the query."""
         if not temporal_expressions:
             # Check for temporal keywords without specific expressions
-            if re.search(r'\bwhen\b|\btime\b|\bdate\b', query_lower):
+            if re.search(r"\bwhen\b|\btime\b|\bdate\b", query_lower):
                 return TemporalScope.POINT
             return TemporalScope.NONE
 
@@ -348,7 +442,7 @@ class QueryAnalyzer:
                 has_range = True
             elif expr.normalized_start:
                 has_point = True
-            if expr.relation in ['before', 'after', 'during']:
+            if expr.relation in ["before", "after", "during"]:
                 has_relative = True
 
         if has_relative:
@@ -370,15 +464,17 @@ class QueryAnalyzer:
     def _determine_answer_type(self, query_lower: str, intent: QueryIntent) -> str:
         """Determine expected answer type."""
         # Yes/No questions
-        if re.match(r'^(is|are|was|were|do|does|did|can|could|will|would|has|have|had)\b', query_lower):
+        if re.match(
+            r"^(is|are|was|were|do|does|did|can|could|will|would|has|have|had)\b", query_lower
+        ):
             return "yes_no"
 
         # Date/time questions
-        if re.search(r'\bwhen\b|\bwhat time\b|\bwhat date\b', query_lower):
+        if re.search(r"\bwhen\b|\bwhat time\b|\bwhat date\b", query_lower):
             return "date"
 
         # Count questions
-        if re.search(r'\bhow many\b|\bhow much\b', query_lower):
+        if re.search(r"\bhow many\b|\bhow much\b", query_lower):
             return "number"
 
         # List questions
@@ -387,7 +483,7 @@ class QueryAnalyzer:
 
         return "text"
 
-    def get_retrieval_strategy(self, analysis: QueryAnalysis) -> Dict[str, Any]:
+    def get_retrieval_strategy(self, analysis: QueryAnalysis) -> dict[str, Any]:
         """
         Determine the retrieval strategy based on query analysis.
 

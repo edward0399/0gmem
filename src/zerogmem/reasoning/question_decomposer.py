@@ -17,26 +17,29 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple, Callable
+from typing import Any
 
 
 @dataclass
 class SubQuestion:
     """A decomposed sub-question."""
+
     id: str
     question: str
     question_type: str  # factual, preference, temporal, existence
-    depends_on: List[str] = field(default_factory=list)  # IDs of questions this depends on
-    answer: Optional[str] = None
+    depends_on: list[str] = field(default_factory=list)  # IDs of questions this depends on
+    answer: str | None = None
     confidence: float = 0.0
 
 
 @dataclass
 class DecompositionResult:
     """Result of question decomposition."""
+
     original_question: str
-    sub_questions: List[SubQuestion]
+    sub_questions: list[SubQuestion]
     reasoning_chain: str
     synthesis_template: str
 
@@ -52,42 +55,53 @@ class QuestionDecomposer:
     # Question type patterns
     MULTI_HOP_PATTERNS = [
         # "Would X do Y based on Z?"
-        (r'would (\w+) (.+?) based on (.+?)(?:\?|$)', 'inference_from_facts'),
+        (r"would (\w+) (.+?) based on (.+?)(?:\?|$)", "inference_from_facts"),
         # "Would X like/enjoy Y?"
-        (r'would (\w+) (?:like|enjoy|prefer) (.+?)(?:\?|$)', 'preference_inference'),
+        (r"would (\w+) (?:like|enjoy|prefer) (.+?)(?:\?|$)", "preference_inference"),
         # "Would X be considered Y?" (religious, patriotic, member of)
-        (r'would (\w+) be (?:considered|thought of as) (?:a |an )?(.+?)(?:\?|$)', 'identity_inference'),
+        (
+            r"would (\w+) be (?:considered|thought of as) (?:a |an )?(.+?)(?:\?|$)",
+            "identity_inference",
+        ),
         # "Would X be more interested in A or B?"
-        (r'would (\w+) be (?:more )?interested in (.+?) or (.+?)(?:\?|$)', 'preference_choice'),
+        (r"would (\w+) be (?:more )?interested in (.+?) or (.+?)(?:\?|$)", "preference_choice"),
         # "What would X recommend?"
-        (r'what (?:would|might|could) (\w+) (.+?)(?:\?|$)', 'recommendation'),
+        (r"what (?:would|might|could) (\w+) (.+?)(?:\?|$)", "recommendation"),
         # "What might X's Y be?" (degree, status, financial status)
-        (r'what (?:might|could|would) (\w+)\'?s? (.+?) be(?:\?|$)', 'attribute_inference'),
+        (r"what (?:might|could|would) (\w+)\'?s? (.+?) be(?:\?|$)", "attribute_inference"),
         # "What fields/traits/job might X pursue/have?"
-        (r'what (\w+) (?:might|would|could) (\w+) (?:have|pursue|say|describe)(?:\?|$)', 'attribute_list'),
+        (
+            r"what (\w+) (?:might|would|could) (\w+) (?:have|pursue|say|describe)(?:\?|$)",
+            "attribute_list",
+        ),
         # "Based on X, would Y?"
-        (r'based on (.+?), (?:would|could|might) (\w+) (.+?)(?:\?|$)', 'conditional'),
+        (r"based on (.+?), (?:would|could|might) (\w+) (.+?)(?:\?|$)", "conditional"),
         # "Would X be open to Y?"
-        (r'would (\w+) be (?:open|willing|likely) to (.+?)(?:\?|$)', 'likelihood_inference'),
+        (r"would (\w+) be (?:open|willing|likely) to (.+?)(?:\?|$)", "likelihood_inference"),
         # "Does X live close to Y?"
-        (r'does (\w+) live (?:close|near) to (.+?)(?:\?|$)', 'location_inference'),
+        (r"does (\w+) live (?:close|near) to (.+?)(?:\?|$)", "location_inference"),
     ]
 
     COMPARISON_PATTERNS = [
         # "What do X and Y both like?"
-        (r'what (?:do|does) (\w+) and (\w+) (?:both )?(like|enjoy|have)', 'intersection'),
+        (r"what (?:do|does) (\w+) and (\w+) (?:both )?(like|enjoy|have)", "intersection"),
         # "How is X different from Y?"
-        (r'how (?:is|are) (\w+) different from (\w+)', 'difference'),
+        (r"how (?:is|are) (\w+) different from (\w+)", "difference"),
     ]
 
     TEMPORAL_CHAIN_PATTERNS = [
         # "What happened before X?"
-        (r'what happened (?:before|after) (.+?)(?:\?|$)', 'temporal_chain'),
+        (r"what happened (?:before|after) (.+?)(?:\?|$)", "temporal_chain"),
         # "When did X happen relative to Y?"
-        (r'(?:when|what time) did (.+?) (?:happen|occur) (?:relative to|compared to) (.+?)(?:\?|$)', 'temporal_relative'),
+        (
+            r"(?:when|what time) did (.+?) "
+            r"(?:happen|occur) "
+            r"(?:relative to|compared to) (.+?)(?:\?|$)",
+            "temporal_relative",
+        ),
     ]
 
-    def decompose(self, question: str, target_entity: Optional[str] = None) -> DecompositionResult:
+    def decompose(self, question: str, target_entity: str | None = None) -> DecompositionResult:
         """
         Decompose a question into sub-questions.
 
@@ -132,12 +146,12 @@ class QuestionDecomposer:
         question: str,
         match: re.Match,
         q_type: str,
-        target_entity: Optional[str],
+        target_entity: str | None,
     ) -> DecompositionResult:
         """Decompose multi-hop inference questions."""
         groups = match.groups()
 
-        if q_type == 'inference_from_facts':
+        if q_type == "inference_from_facts":
             entity, action, basis = groups
             return DecompositionResult(
                 original_question=question,
@@ -158,7 +172,7 @@ class QuestionDecomposer:
                 synthesis_template="Based on {entity}'s {basis} ({q1}), {inference}",
             )
 
-        elif q_type == 'preference_inference':
+        elif q_type == "preference_inference":
             entity, item = groups
             return DecompositionResult(
                 original_question=question,
@@ -180,11 +194,17 @@ class QuestionDecomposer:
                         depends_on=["q1", "q2"],
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity}'s hobbies\n2. Find stated preferences\n3. Infer preference for {item}",
-                synthesis_template="Given {entity}'s interests ({q1}) and preferences ({q2}), {conclusion}",
+                reasoning_chain=(
+                    f"1. Find {entity}'s hobbies\n"
+                    f"2. Find stated preferences\n"
+                    f"3. Infer preference for {item}"
+                ),
+                synthesis_template=(
+                    "Given {entity}'s interests" " ({q1}) and preferences" " ({q2}), {conclusion}"
+                ),
             )
 
-        elif q_type == 'recommendation':
+        elif q_type == "recommendation":
             entity, action = groups
             return DecompositionResult(
                 original_question=question,
@@ -200,11 +220,20 @@ class QuestionDecomposer:
                         question_type="factual",
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity}'s experiences\n2. Find preferences\n3. Synthesize recommendation",
-                synthesis_template="Based on {entity}'s experience ({q1}) and preferences ({q2}), they would likely {action}",
+                reasoning_chain=(
+                    f"1. Find {entity}'s experiences\n"
+                    "2. Find preferences\n"
+                    "3. Synthesize recommendation"
+                ),
+                synthesis_template=(
+                    "Based on {entity}'s experience"
+                    " ({q1}) and preferences"
+                    " ({q2}), they would likely"
+                    " {action}"
+                ),
             )
 
-        elif q_type == 'identity_inference':
+        elif q_type == "identity_inference":
             # "Would X be considered religious/patriotic/member of Y?"
             entity, identity = groups
             return DecompositionResult(
@@ -222,11 +251,16 @@ class QuestionDecomposer:
                         depends_on=["q1"],
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity}'s activities and beliefs\n2. Infer if they would be {identity}",
+                reasoning_chain=(
+                    f"1. Find {entity}'s activities"
+                    f" and beliefs\n"
+                    f"2. Infer if they would be"
+                    f" {identity}"
+                ),
                 synthesis_template="Based on {entity}'s activities ({q1}), {conclusion}",
             )
 
-        elif q_type == 'preference_choice':
+        elif q_type == "preference_choice":
             # "Would X be more interested in A or B?"
             entity, option_a, option_b = groups
             return DecompositionResult(
@@ -243,11 +277,15 @@ class QuestionDecomposer:
                         question_type="factual",
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity}'s interests\n2. Determine preference between {option_a} and {option_b}",
+                reasoning_chain=(
+                    f"1. Find {entity}'s interests\n"
+                    f"2. Determine preference between"
+                    f" {option_a} and {option_b}"
+                ),
                 synthesis_template="Given {entity}'s interests ({q1}), they would prefer {choice}",
             )
 
-        elif q_type == 'attribute_inference':
+        elif q_type == "attribute_inference":
             # "What might X's degree/status be?"
             entity, attribute = groups
             return DecompositionResult(
@@ -265,10 +303,14 @@ class QuestionDecomposer:
                     ),
                 ],
                 reasoning_chain=f"1. Find {entity}'s education/work\n2. Infer their {attribute}",
-                synthesis_template="Based on {entity}'s background ({q1}), their {attribute} is likely {conclusion}",
+                synthesis_template=(
+                    "Based on {entity}'s background"
+                    " ({q1}), their {attribute}"
+                    " is likely {conclusion}"
+                ),
             )
 
-        elif q_type == 'likelihood_inference':
+        elif q_type == "likelihood_inference":
             # "Would X be open to Y?"
             entity, action = groups
             return DecompositionResult(
@@ -289,7 +331,7 @@ class QuestionDecomposer:
                 synthesis_template="Given {entity}'s priorities ({q1}), {conclusion}",
             )
 
-        elif q_type == 'location_inference':
+        elif q_type == "location_inference":
             # "Does X live close to beach or mountains?"
             entity, location = groups
             return DecompositionResult(
@@ -306,11 +348,15 @@ class QuestionDecomposer:
                         question_type="factual",
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity}'s location\n2. Determine proximity to {location}",
-                synthesis_template="Based on {entity}'s location ({q1}), they live near {conclusion}",
+                reasoning_chain=(
+                    f"1. Find {entity}'s location\n" f"2. Determine proximity to" f" {location}"
+                ),
+                synthesis_template=(
+                    "Based on {entity}'s location" " ({q1}), they live near" " {conclusion}"
+                ),
             )
 
-        elif q_type == 'conditional':
+        elif q_type == "conditional":
             condition, entity, action = groups
             return DecompositionResult(
                 original_question=question,
@@ -327,7 +373,12 @@ class QuestionDecomposer:
                         depends_on=["q1"],
                     ),
                 ],
-                reasoning_chain=f"1. Establish facts about {condition}\n2. Apply to determine if {entity} would {action}",
+                reasoning_chain=(
+                    f"1. Establish facts about"
+                    f" {condition}\n"
+                    f"2. Apply to determine if"
+                    f" {entity} would {action}"
+                ),
                 synthesis_template="Given {condition} ({q1}), {conclusion}",
             )
 
@@ -343,7 +394,7 @@ class QuestionDecomposer:
         """Decompose comparison questions."""
         groups = match.groups()
 
-        if q_type == 'intersection':
+        if q_type == "intersection":
             entity1, entity2, attribute = groups
             return DecompositionResult(
                 original_question=question,
@@ -365,11 +416,17 @@ class QuestionDecomposer:
                         depends_on=["q1", "q2"],
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity1}'s {attribute}\n2. Find {entity2}'s {attribute}\n3. Find intersection",
+                reasoning_chain=(
+                    f"1. Find {entity1}'s"
+                    f" {attribute}\n"
+                    f"2. Find {entity2}'s"
+                    f" {attribute}\n"
+                    "3. Find intersection"
+                ),
                 synthesis_template="Both {entity1} and {entity2} {attribute}: {intersection}",
             )
 
-        elif q_type == 'difference':
+        elif q_type == "difference":
             entity1, entity2 = groups
             return DecompositionResult(
                 original_question=question,
@@ -385,7 +442,9 @@ class QuestionDecomposer:
                         question_type="factual",
                     ),
                 ],
-                reasoning_chain=f"1. Find {entity1}'s traits\n2. Find {entity2}'s traits\n3. Compare",
+                reasoning_chain=(
+                    f"1. Find {entity1}'s traits\n" f"2. Find {entity2}'s traits\n" "3. Compare"
+                ),
                 synthesis_template="{entity1} differs from {entity2} in: {differences}",
             )
 
@@ -396,12 +455,12 @@ class QuestionDecomposer:
         question: str,
         match: re.Match,
         q_type: str,
-        target_entity: Optional[str],
+        target_entity: str | None,
     ) -> DecompositionResult:
         """Decompose temporal chain questions."""
         groups = match.groups()
 
-        if q_type == 'temporal_chain':
+        if q_type == "temporal_chain":
             event = groups[0]
             entity = target_entity or "the person"
             return DecompositionResult(
@@ -452,8 +511,8 @@ class ReasoningChainExecutor:
     def __init__(
         self,
         answer_fn: Callable[[str], str],
-        llm_client: Optional[Any] = None,
-        model: Optional[str] = None,
+        llm_client: Any | None = None,
+        model: str | None = None,
         max_retries: int = 3,
         retry_backoff: float = 1.5,
     ):
@@ -466,20 +525,21 @@ class ReasoningChainExecutor:
         """
         self.answer_fn = answer_fn
         self._client = llm_client
-        self._model = model or os.getenv("OPENAI_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
+        self._model = (
+            model or os.getenv("OPENAI_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
+        )
         self._max_retries = max_retries
         self._retry_backoff = retry_backoff
 
     def _chat_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         max_tokens: int = 150,
         temperature: float = 0.0,
-    ) -> Optional[str]:
+    ) -> str | None:
         if not self._client:
             return None
 
-        last_err: Optional[Exception] = None
         for attempt in range(self._max_retries):
             try:
                 response = self._client.chat.completions.create(
@@ -488,17 +548,17 @@ class ReasoningChainExecutor:
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
-                return response.choices[0].message.content.strip()
-            except Exception as e:
-                last_err = e
-                sleep_s = min(30.0, self._retry_backoff ** attempt)
+                result: str = response.choices[0].message.content.strip()
+                return result
+            except Exception:
+                sleep_s = min(30.0, self._retry_backoff**attempt)
                 time.sleep(sleep_s)
 
         return None
 
     def execute(self, decomposition: DecompositionResult) -> str:
         """Execute the reasoning chain and return final answer."""
-        answers = {}
+        answers: dict[str, str] = {}
 
         # Answer sub-questions in dependency order
         for sq in decomposition.sub_questions:
@@ -529,7 +589,7 @@ class ReasoningChainExecutor:
     def _synthesize(
         self,
         decomposition: DecompositionResult,
-        answers: Dict[str, str],
+        answers: dict[str, str],
     ) -> str:
         """Synthesize final answer from sub-answers."""
         # If only one question, return its answer directly
@@ -543,7 +603,9 @@ class ReasoningChainExecutor:
 
         # If LLM available, do proper synthesis
         if self._client:
-            sub_answers = "\n".join(f"- {sq.question}: {sq.answer}" for sq in decomposition.sub_questions)
+            sub_answers = "\n".join(
+                f"- {sq.question}: {sq.answer}" for sq in decomposition.sub_questions
+            )
 
             prompt = f"""Synthesize a final answer from these sub-answers:
 
@@ -560,13 +622,13 @@ For yes/no questions, start with Yes/No.
 Final Answer:"""
 
             try:
-                answer = self._chat_completion(
+                synthesis_result = self._chat_completion(
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=150,
                     temperature=0,
                 )
-                if answer:
-                    return answer
+                if synthesis_result:
+                    return synthesis_result
             except Exception:
                 pass
 

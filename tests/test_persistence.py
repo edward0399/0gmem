@@ -1,25 +1,20 @@
 """Tests for persistence: save/load memory state to disk."""
 
 import json
-import shutil
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import pytest
 
-from zerogmem.memory.manager import MemoryManager, MemoryConfig
-from zerogmem.memory.episodic import Episode, EpisodeMessage
-from zerogmem.memory.semantic import Fact
 from zerogmem.graph.entity import EntityNode, EntityType
 from zerogmem.graph.temporal import TimeInterval
-from zerogmem.graph.unified import UnifiedMemoryItem
+from zerogmem.memory.manager import MemoryConfig, MemoryManager
 from zerogmem.persistence import (
-    save_memory_state,
-    load_memory_state,
-    EmbeddingRegistry,
-    STATE_FILENAME,
     EMBEDDINGS_FILENAME,
+    STATE_FILENAME,
+    EmbeddingRegistry,
+    load_memory_state,
+    save_memory_state,
 )
 
 
@@ -34,9 +29,11 @@ def tmp_persist_dir(tmp_path):
 @pytest.fixture
 def mock_embedding_fn():
     """Deterministic hash-based embedding function."""
+
     def _embed(text: str) -> np.ndarray:
         np.random.seed(hash(text) % (2**31))
         return np.random.randn(1536).astype(np.float32)
+
     return _embed
 
 
@@ -49,7 +46,9 @@ def populated_manager(mock_embedding_fn):
 
     # Start a session and add messages
     mm.start_session(session_id="session-1")
-    mm.add_message("Alice", "I love hiking in the mountains.", timestamp=datetime(2024, 6, 1, 10, 0))
+    mm.add_message(
+        "Alice", "I love hiking in the mountains.", timestamp=datetime(2024, 6, 1, 10, 0)
+    )
     mm.add_message("Bob", "Have you tried the Alps?", timestamp=datetime(2024, 6, 1, 10, 5))
     mm.end_session()
 
@@ -58,8 +57,8 @@ def populated_manager(mock_embedding_fn):
     mm.end_session()
 
     # Add entities
-    alice_id = mm.add_entity("Alice", EntityType.PERSON, attributes={"age": 30})
-    bob_id = mm.add_entity("Bob", EntityType.PERSON)
+    mm.add_entity("Alice", EntityType.PERSON, attributes={"age": 30})
+    mm.add_entity("Bob", EntityType.PERSON)
 
     # Add relation
     mm.add_relation("Alice", "knows", "Bob")
@@ -146,7 +145,9 @@ class TestSaveLoadMemoryState:
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
-        assert len(restored.episodic_memory.episodes) == len(populated_manager.episodic_memory.episodes)
+        assert len(restored.episodic_memory.episodes) == len(
+            populated_manager.episodic_memory.episodes
+        )
 
         for eid, orig_ep in populated_manager.episodic_memory.episodes.items():
             rest_ep = restored.episodic_memory.episodes.get(eid)
@@ -172,7 +173,9 @@ class TestSaveLoadMemoryState:
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
-        assert len(restored.graph.entity_graph.nodes) == len(populated_manager.graph.entity_graph.nodes)
+        assert len(restored.graph.entity_graph.nodes) == len(
+            populated_manager.graph.entity_graph.nodes
+        )
 
         for nid, orig_node in populated_manager.graph.entity_graph.nodes.items():
             rest_node = restored.graph.entity_graph.nodes.get(nid)
@@ -185,7 +188,9 @@ class TestSaveLoadMemoryState:
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
         # Check that at least some memories have embeddings restored
-        orig_with_emb = [m for m in populated_manager.graph.memories.values() if m.embedding is not None]
+        orig_with_emb = [
+            m for m in populated_manager.graph.memories.values() if m.embedding is not None
+        ]
         rest_with_emb = [m for m in restored.graph.memories.values() if m.embedding is not None]
         assert len(rest_with_emb) == len(orig_with_emb)
 
@@ -193,7 +198,10 @@ class TestSaveLoadMemoryState:
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
-        assert restored.config.working_memory_capacity == populated_manager.config.working_memory_capacity
+        assert (
+            restored.config.working_memory_capacity
+            == populated_manager.config.working_memory_capacity
+        )
         assert restored.config.embedding_dim == populated_manager.config.embedding_dim
 
     def test_empty_state_round_trip(self, mock_embedding_fn, tmp_persist_dir):
@@ -238,15 +246,23 @@ class TestSaveLoadMemoryState:
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
-        assert len(restored.graph.temporal_graph.nodes) == len(populated_manager.graph.temporal_graph.nodes)
+        assert len(restored.graph.temporal_graph.nodes) == len(
+            populated_manager.graph.temporal_graph.nodes
+        )
 
-    def test_round_trip_semantic_graph_nodes(self, populated_manager, mock_embedding_fn, tmp_persist_dir):
+    def test_round_trip_semantic_graph_nodes(
+        self, populated_manager, mock_embedding_fn, tmp_persist_dir
+    ):
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
-        assert len(restored.graph.semantic_graph.nodes) == len(populated_manager.graph.semantic_graph.nodes)
+        assert len(restored.graph.semantic_graph.nodes) == len(
+            populated_manager.graph.semantic_graph.nodes
+        )
 
-    def test_round_trip_preserves_indexes(self, populated_manager, mock_embedding_fn, tmp_persist_dir):
+    def test_round_trip_preserves_indexes(
+        self, populated_manager, mock_embedding_fn, tmp_persist_dir
+    ):
         save_memory_state(populated_manager, tmp_persist_dir)
         restored = load_memory_state(tmp_persist_dir, mock_embedding_fn)
 
@@ -262,15 +278,19 @@ class TestGraphFromDict:
     """Tests for individual graph from_dict methods."""
 
     def test_temporal_graph_round_trip(self, mock_embedding_fn):
-        from zerogmem.graph.temporal import TemporalGraph, TemporalNode, TimeInterval
+        from zerogmem.graph.temporal import TemporalGraph, TemporalNode
 
         g = TemporalGraph()
-        n1 = TemporalNode(content="morning jog", event_time=TimeInterval(
-            start=datetime(2024, 6, 1, 8, 0), end=datetime(2024, 6, 1, 9, 0)
-        ), entities=["alice"])
-        n2 = TemporalNode(content="lunch", event_time=TimeInterval(
-            start=datetime(2024, 6, 1, 12, 0)
-        ))
+        n1 = TemporalNode(
+            content="morning jog",
+            event_time=TimeInterval(
+                start=datetime(2024, 6, 1, 8, 0), end=datetime(2024, 6, 1, 9, 0)
+            ),
+            entities=["alice"],
+        )
+        n2 = TemporalNode(
+            content="lunch", event_time=TimeInterval(start=datetime(2024, 6, 1, 12, 0))
+        )
         g.add_node(n1)
         g.add_node(n2)
 
@@ -284,7 +304,7 @@ class TestGraphFromDict:
         assert len(restored.edges) > 0
 
     def test_entity_graph_round_trip(self):
-        from zerogmem.graph.entity import EntityGraph, EntityNode, EntityEdge, EntityType
+        from zerogmem.graph.entity import EntityEdge, EntityGraph, EntityType
 
         g = EntityGraph()
         alice = EntityNode(name="Alice", entity_type=EntityType.PERSON, aliases=["Ali"])
@@ -302,7 +322,7 @@ class TestGraphFromDict:
         assert len(restored.edges) == 1
 
     def test_causal_graph_round_trip(self):
-        from zerogmem.graph.causal import CausalGraph, CausalNode, CausalEdge
+        from zerogmem.graph.causal import CausalEdge, CausalGraph, CausalNode
 
         g = CausalGraph()
         n1 = CausalNode(content="rain", event_type="event")
@@ -332,9 +352,7 @@ class TestGraphFromDict:
         assert len(restored.nodes) == 1
         assert restored.nodes[n.id].content == "hiking"
         assert restored.nodes[n.id].concepts == ["outdoors"]
-        np.testing.assert_array_almost_equal(
-            restored.nodes[n.id].embedding, emb
-        )
+        np.testing.assert_array_almost_equal(restored.nodes[n.id].embedding, emb)
 
 
 class TestCorruptionRecovery:
@@ -384,9 +402,7 @@ class TestCorruptionRecovery:
         assert restored is not None
         assert len(restored.graph.memories) == len(populated_manager.graph.memories)
 
-    def test_missing_npz_still_loads(
-        self, populated_manager, mock_embedding_fn, tmp_persist_dir
-    ):
+    def test_missing_npz_still_loads(self, populated_manager, mock_embedding_fn, tmp_persist_dir):
         """Missing NPZ (deleted after save) -> loads without embeddings."""
         save_memory_state(populated_manager, tmp_persist_dir)
         (tmp_persist_dir / EMBEDDINGS_FILENAME).unlink()
@@ -488,6 +504,7 @@ class TestSchemaVersioning:
 
         # Register a mock migration and bump SCHEMA_VERSION
         migration_called = False
+
         def mock_v1_to_v2(state):
             nonlocal migration_called
             migration_called = True

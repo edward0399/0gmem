@@ -1,18 +1,17 @@
 """Tests for thread safety: asyncio.Lock serialization and atomic persistence."""
 
 import asyncio
-import os
 import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_embedding_fn(text: str) -> np.ndarray:
     """Deterministic hash-based embedding function."""
@@ -24,12 +23,14 @@ def _mock_embedding_fn(text: str) -> np.ndarray:
 # MCP Server Lock Tests
 # ---------------------------------------------------------------------------
 
+
 class TestMCPServerLock:
     """Verify that the asyncio.Lock serializes concurrent tool handler calls."""
 
     def test_lock_exists(self):
         """The module-level _lock should be an asyncio.Lock."""
         from zerogmem.mcp_server import _lock
+
         assert isinstance(_lock, asyncio.Lock)
 
     @pytest.mark.asyncio
@@ -40,18 +41,20 @@ class TestMCPServerLock:
         call_order = []
 
         original_ensure = mcp_server._ensure_session
-        original_add = None
 
         # Patch internals to track call ordering
         def tracking_ensure():
             original_ensure()
             call_order.append("ensure_start")
 
-        with patch.object(mcp_server, "_initialized", True), \
-             patch.object(mcp_server, "_ensure_session", side_effect=tracking_ensure):
+        with (
+            patch.object(mcp_server, "_initialized", True),
+            patch.object(mcp_server, "_ensure_session", side_effect=tracking_ensure),
+        ):
 
             # Create a real MemoryManager for testing
             from zerogmem import MemoryManager
+
             mm = MemoryManager()
             mm.set_embedding_function(_mock_embedding_fn)
             mm.start_session()
@@ -84,6 +87,7 @@ class TestMCPServerLock:
 
         class TrackingLock:
             """Wrapper that logs acquire/release events."""
+
             async def __aenter__(self):
                 await real_lock.acquire()
                 events.append("acquired")
@@ -95,8 +99,10 @@ class TestMCPServerLock:
 
         tracking = TrackingLock()
 
-        with patch.object(mcp_server, "_lock", tracking), \
-             patch.object(mcp_server, "_initialized", True):
+        with (
+            patch.object(mcp_server, "_lock", tracking),
+            patch.object(mcp_server, "_initialized", True),
+        ):
 
             mm = MagicMock()
             mm.current_session_id = "test"
@@ -114,8 +120,7 @@ class TestMCPServerLock:
                 # (no two "acquired" in a row without a "released" between)
                 for i, event in enumerate(events):
                     if event == "acquired" and i > 0:
-                        assert events[i - 1] == "released", \
-                            f"Lock not serialized: {events}"
+                        assert events[i - 1] == "released", f"Lock not serialized: {events}"
             finally:
                 mcp_server._memory_manager = original
 
@@ -126,7 +131,7 @@ class TestMCPClearDuringOps:
     @pytest.mark.asyncio
     async def test_clear_and_store_serialized(self):
         """Running clear + store concurrently should not raise."""
-        from zerogmem import mcp_server, MemoryManager
+        from zerogmem import MemoryManager, mcp_server
 
         with patch.object(mcp_server, "_initialized", True):
             mm = MemoryManager()
@@ -139,10 +144,13 @@ class TestMCPClearDuringOps:
             mock_encoder = MagicMock()
             mock_encoder.get_embedding = _mock_embedding_fn
 
-            with patch("zerogmem.mcp_server._get_memory_dir") as mock_dir, \
-                 patch("zerogmem.Encoder", return_value=mock_encoder), \
-                 patch("zerogmem.Retriever"):
+            with (
+                patch("zerogmem.mcp_server._get_memory_dir") as mock_dir,
+                patch("zerogmem.Encoder", return_value=mock_encoder),
+                patch("zerogmem.Retriever"),
+            ):
                 import tempfile
+
                 tmp = Path(tempfile.mkdtemp())
                 mock_dir.return_value = tmp
 
@@ -161,13 +169,14 @@ class TestMCPClearDuringOps:
 # Atomic Persistence Tests
 # ---------------------------------------------------------------------------
 
+
 class TestAtomicPersistence:
     """Verify that saves use atomic write pattern."""
 
     def test_json_atomic_write(self, tmp_path):
         """save_memory_state should not leave partial JSON files."""
         from zerogmem import MemoryManager
-        from zerogmem.persistence import save_memory_state, STATE_FILENAME
+        from zerogmem.persistence import STATE_FILENAME, save_memory_state
 
         mm = MemoryManager()
         mm.set_embedding_function(_mock_embedding_fn)
@@ -187,7 +196,7 @@ class TestAtomicPersistence:
 
     def test_npz_atomic_write(self, tmp_path):
         """NPZ embedding save should use atomic rename."""
-        from zerogmem.persistence import EmbeddingRegistry, EMBEDDINGS_FILENAME
+        from zerogmem.persistence import EMBEDDINGS_FILENAME, EmbeddingRegistry
 
         reg = EmbeddingRegistry()
         emb = np.random.randn(1536).astype(np.float32)
@@ -225,7 +234,7 @@ class TestAtomicPersistence:
     def test_backup_still_created(self, tmp_path):
         """Atomic writes should still create .bak on second save."""
         from zerogmem import MemoryManager
-        from zerogmem.persistence import save_memory_state, STATE_FILENAME
+        from zerogmem.persistence import STATE_FILENAME, save_memory_state
 
         mm = MemoryManager()
         mm.set_embedding_function(_mock_embedding_fn)
@@ -241,7 +250,7 @@ class TestAtomicPersistence:
     def test_concurrent_saves_produce_valid_files(self, tmp_path):
         """Multiple sequential saves should always produce valid files."""
         from zerogmem import MemoryManager
-        from zerogmem.persistence import save_memory_state, load_memory_state
+        from zerogmem.persistence import load_memory_state, save_memory_state
 
         mm = MemoryManager()
         mm.set_embedding_function(_mock_embedding_fn)
@@ -265,6 +274,7 @@ class TestAtomicPersistence:
 # Double-Initialization Guard Tests
 # ---------------------------------------------------------------------------
 
+
 class TestInitializationSafety:
     """Verify _initialize_memory is safe under concurrent calls."""
 
@@ -274,7 +284,6 @@ class TestInitializationSafety:
         from zerogmem import mcp_server
 
         init_count = 0
-        original_init = mcp_server._initialize_memory
 
         def counting_init():
             nonlocal init_count

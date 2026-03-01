@@ -8,15 +8,17 @@ content that dilutes LLM attention.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Set, Tuple
-import re
+from typing import Any
+
 import numpy as np
 
 
 @dataclass
 class FilterConfig:
     """Configuration for the attention filter."""
+
     relevance_threshold: float = 0.3  # Min relevance score to keep
     max_context_tokens: int = 2000  # Target context size
     diversity_weight: float = 0.3  # How much to prioritize diversity vs relevance
@@ -40,8 +42,8 @@ class AttentionFilter:
 
     def __init__(
         self,
-        config: Optional[FilterConfig] = None,
-        embedding_fn: Optional[callable] = None
+        config: FilterConfig | None = None,
+        embedding_fn: Callable[..., Any] | None = None,
     ):
         self.config = config or FilterConfig()
         self._embedding_fn = embedding_fn
@@ -49,9 +51,9 @@ class AttentionFilter:
     def filter_context(
         self,
         query: str,
-        results: List[Any],  # RetrievalResult objects
-        query_analysis: Optional[Any] = None,
-    ) -> List[Any]:
+        results: list[Any],  # RetrievalResult objects
+        query_analysis: Any | None = None,
+    ) -> list[Any]:
         """
         Filter retrieved results to only essential information.
 
@@ -71,8 +73,7 @@ class AttentionFilter:
 
         # Step 2: Remove low-relevance items
         filtered = [
-            (r, score) for r, score in scored_results
-            if score >= self.config.relevance_threshold
+            (r, score) for r, score in scored_results if score >= self.config.relevance_threshold
         ]
 
         # Step 3: Remove semantic duplicates
@@ -90,9 +91,9 @@ class AttentionFilter:
     def _score_relevance(
         self,
         query: str,
-        results: List[Any],
-        query_analysis: Optional[Any],
-    ) -> List[Tuple[Any, float]]:
+        results: list[Any],
+        query_analysis: Any | None,
+    ) -> list[tuple[Any, float]]:
         """Score each result's relevance to the query."""
         scored = []
         query_lower = query.lower()
@@ -102,9 +103,9 @@ class AttentionFilter:
         entities = set()
         keywords = set()
         if query_analysis:
-            if hasattr(query_analysis, 'entities'):
+            if hasattr(query_analysis, "entities"):
                 entities = set(e.lower() for e in query_analysis.entities)
-            if hasattr(query_analysis, 'keywords'):
+            if hasattr(query_analysis, "keywords"):
                 keywords = set(k.lower() for k in query_analysis.keywords)
 
         for result in results:
@@ -116,16 +117,16 @@ class AttentionFilter:
             # Boost for entity overlap
             if entities:
                 entity_hits = sum(1 for e in entities if e in content_lower)
-                score *= (1 + 0.2 * entity_hits)
+                score *= 1 + 0.2 * entity_hits
 
             # Boost for keyword overlap
             if keywords:
                 keyword_hits = sum(1 for k in keywords if k in content_lower)
-                score *= (1 + 0.1 * keyword_hits)
+                score *= 1 + 0.1 * keyword_hits
 
             # Boost for query word overlap
             word_overlap = len(query_words & content_words) / max(len(query_words), 1)
-            score *= (1 + 0.15 * word_overlap)
+            score *= 1 + 0.15 * word_overlap
 
             # Penalty for very long content (might be noise)
             content_len = len(result.content)
@@ -134,7 +135,9 @@ class AttentionFilter:
                 score *= length_penalty
 
             # Boost for negation-related content if query is preference-related
-            if result.negated and any(w in query_lower for w in ['like', 'love', 'prefer', 'enjoy']):
+            if result.negated and any(
+                w in query_lower for w in ["like", "love", "prefer", "enjoy"]
+            ):
                 score *= 1.3
 
             scored.append((result, score))
@@ -142,9 +145,8 @@ class AttentionFilter:
         return scored
 
     def _remove_semantic_duplicates(
-        self,
-        results: List[Tuple[Any, float]]
-    ) -> List[Tuple[Any, float]]:
+        self, results: list[tuple[Any, float]]
+    ) -> list[tuple[Any, float]]:
         """Remove semantically similar results, keeping highest scored."""
         if not results or not self._embedding_fn:
             return results
@@ -152,7 +154,7 @@ class AttentionFilter:
         # Sort by score descending
         sorted_results = sorted(results, key=lambda x: x[1], reverse=True)
         kept = []
-        kept_embeddings = []
+        kept_embeddings: list[np.ndarray] = []
 
         for result, score in sorted_results:
             # Get embedding for this result
@@ -182,17 +184,17 @@ class AttentionFilter:
 
     def _ensure_diversity(
         self,
-        results: List[Tuple[Any, float]],
-        query_analysis: Optional[Any],
-    ) -> List[Tuple[Any, float]]:
+        results: list[tuple[Any, float]],
+        query_analysis: Any | None,
+    ) -> list[tuple[Any, float]]:
         """Ensure diversity in results - don't return too many similar items."""
         if len(results) <= 3:
             return results
 
         # Group by source
-        by_source: Dict[str, List[Tuple[Any, float]]] = {}
+        by_source: dict[str, list[tuple[Any, float]]] = {}
         for result, score in results:
-            source = getattr(result, 'source', 'unknown')
+            source = getattr(result, "source", "unknown")
             if source not in by_source:
                 by_source[source] = []
             by_source[source].append((result, score))
@@ -205,7 +207,9 @@ class AttentionFilter:
             if len(source_results) / total > 0.7:
                 # Take top 50% from this source
                 max_from_source = max(3, len(source_results) // 2)
-                diverse.extend(sorted(source_results, key=lambda x: x[1], reverse=True)[:max_from_source])
+                diverse.extend(
+                    sorted(source_results, key=lambda x: x[1], reverse=True)[:max_from_source]
+                )
             else:
                 diverse.extend(source_results)
 
@@ -213,10 +217,7 @@ class AttentionFilter:
         diverse.sort(key=lambda x: x[1], reverse=True)
         return diverse
 
-    def _apply_token_budget(
-        self,
-        results: List[Tuple[Any, float]]
-    ) -> List[Tuple[Any, float]]:
+    def _apply_token_budget(self, results: list[tuple[Any, float]]) -> list[tuple[Any, float]]:
         """Apply token budget to limit context size."""
         max_chars = self.config.max_context_tokens * self.config.chars_per_token
         total_chars = 0
@@ -248,8 +249,8 @@ class AttentionFilter:
     def compute_sufficiency_score(
         self,
         query: str,
-        results: List[Any],
-        query_analysis: Optional[Any] = None,
+        results: list[Any],
+        query_analysis: Any | None = None,
     ) -> float:
         """
         Compute a score indicating how sufficient the context is for answering the query.
@@ -267,7 +268,7 @@ class AttentionFilter:
         scores = []
 
         # Factor 1: Entity coverage
-        if query_analysis and hasattr(query_analysis, 'entities') and query_analysis.entities:
+        if query_analysis and hasattr(query_analysis, "entities") and query_analysis.entities:
             entities = set(e.lower() for e in query_analysis.entities)
             entity_hits = 0
             for result in results[:10]:
@@ -292,7 +293,7 @@ class AttentionFilter:
         scores.append(result_count_score)
 
         # Factor 4: Keyword coverage
-        if query_analysis and hasattr(query_analysis, 'keywords') and query_analysis.keywords:
+        if query_analysis and hasattr(query_analysis, "keywords") and query_analysis.keywords:
             keywords = set(k.lower() for k in query_analysis.keywords[:5])
             keyword_hits = 0
             for result in results[:10]:

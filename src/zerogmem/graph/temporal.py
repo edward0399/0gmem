@@ -11,40 +11,43 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional, List, Dict, Set, Tuple, Any
+from typing import Any
+
 import networkx as nx
 
 
 class TemporalRelation(Enum):
     """Allen's Interval Algebra relations."""
-    BEFORE = "before"           # A ends before B starts
-    AFTER = "after"             # A starts after B ends
-    MEETS = "meets"             # A ends exactly when B starts
-    MET_BY = "met_by"           # A starts exactly when B ends
-    OVERLAPS = "overlaps"       # A starts before B, ends during B
+
+    BEFORE = "before"  # A ends before B starts
+    AFTER = "after"  # A starts after B ends
+    MEETS = "meets"  # A ends exactly when B starts
+    MET_BY = "met_by"  # A starts exactly when B ends
+    OVERLAPS = "overlaps"  # A starts before B, ends during B
     OVERLAPPED_BY = "overlapped_by"
-    DURING = "during"           # A occurs within B's timespan
-    CONTAINS = "contains"       # B occurs within A's timespan
-    STARTS = "starts"           # A starts at same time as B, ends earlier
+    DURING = "during"  # A occurs within B's timespan
+    CONTAINS = "contains"  # B occurs within A's timespan
+    STARTS = "starts"  # A starts at same time as B, ends earlier
     STARTED_BY = "started_by"
-    FINISHES = "finishes"       # A ends at same time as B, starts later
+    FINISHES = "finishes"  # A ends at same time as B, starts later
     FINISHED_BY = "finished_by"
-    EQUALS = "equals"           # A and B have same start and end
-    CONCURRENT = "concurrent"   # Simplified: A and B overlap in any way
+    EQUALS = "equals"  # A and B have same start and end
+    CONCURRENT = "concurrent"  # Simplified: A and B overlap in any way
 
 
 @dataclass
 class TimeInterval:
     """Represents a time interval with start and end."""
+
     start: datetime
-    end: Optional[datetime] = None  # None means point event or ongoing
+    end: datetime | None = None  # None means point event or ongoing
 
     @property
     def is_point(self) -> bool:
         return self.end is None or self.start == self.end
 
     @property
-    def duration(self) -> Optional[timedelta]:
+    def duration(self) -> timedelta | None:
         if self.end is None:
             return None
         return self.end - self.start
@@ -69,19 +72,22 @@ class TimeInterval:
 @dataclass
 class TemporalNode:
     """A node in the temporal graph representing an event or state."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str = ""
     event_time: TimeInterval = field(default_factory=lambda: TimeInterval(datetime.now()))
-    ingestion_time: datetime = field(default_factory=datetime.now)  # Bitemporal: when we learned this
-    memory_id: Optional[str] = None  # Reference to associated memory
-    entities: List[str] = field(default_factory=list)  # Entity IDs involved
+    ingestion_time: datetime = field(
+        default_factory=datetime.now
+    )  # Bitemporal: when we learned this
+    memory_id: str | None = None  # Reference to associated memory
+    entities: list[str] = field(default_factory=list)  # Entity IDs involved
     importance: float = 0.5
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, TemporalNode):
             return self.id == other.id
         return False
@@ -90,12 +96,13 @@ class TemporalNode:
 @dataclass
 class TemporalEdge:
     """An edge representing temporal relation between two nodes."""
+
     source_id: str
     target_id: str
     relation: TemporalRelation
     confidence: float = 1.0
     inferred: bool = False  # Was this inferred or explicitly stated?
-    evidence: List[str] = field(default_factory=list)  # Memory IDs supporting this
+    evidence: list[str] = field(default_factory=list)  # Memory IDs supporting this
 
 
 class TemporalGraph:
@@ -109,12 +116,12 @@ class TemporalGraph:
     - Perform temporal chain reasoning
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.graph = nx.DiGraph()
-        self.nodes: Dict[str, TemporalNode] = {}
-        self.edges: List[TemporalEdge] = []
+        self.nodes: dict[str, TemporalNode] = {}
+        self.edges: list[TemporalEdge] = []
         # Index for efficient temporal queries
-        self._time_index: Dict[datetime, Set[str]] = {}
+        self._time_index: dict[datetime, set[str]] = {}
 
     def add_node(self, node: TemporalNode, compute_relations: bool = True) -> str:
         """Add a temporal node to the graph.
@@ -148,7 +155,7 @@ class TemporalGraph:
         count = 0
         node_ids = list(self.nodes.keys())
         for i, nid_a in enumerate(node_ids):
-            for nid_b in node_ids[i + 1:]:
+            for nid_b in node_ids[i + 1 :]:
                 relation = self.compute_relation(self.nodes[nid_a], self.nodes[nid_b])
                 if relation:
                     edge = TemporalEdge(
@@ -186,10 +193,7 @@ class TemporalGraph:
             relation = self.compute_relation(node, existing_node)
             if relation:
                 edge = TemporalEdge(
-                    source_id=node.id,
-                    target_id=existing_id,
-                    relation=relation,
-                    inferred=True
+                    source_id=node.id, target_id=existing_id, relation=relation, inferred=True
                 )
                 self.add_edge(edge)
 
@@ -201,10 +205,10 @@ class TemporalGraph:
             edge.target_id,
             relation=edge.relation,
             confidence=edge.confidence,
-            data=edge
+            data=edge,
         )
 
-    def compute_relation(self, a: TemporalNode, b: TemporalNode) -> Optional[TemporalRelation]:
+    def compute_relation(self, a: TemporalNode, b: TemporalNode) -> TemporalRelation | None:
         """
         Compute the temporal relation between two events using Allen's Interval Algebra.
         """
@@ -245,17 +249,22 @@ class TemporalGraph:
         else:
             return TemporalRelation.CONCURRENT
 
-    def events_at(self, timestamp: datetime, tolerance: timedelta = timedelta(hours=1)) -> List[TemporalNode]:
+    def events_at(
+        self, timestamp: datetime, tolerance: timedelta = timedelta(hours=1)
+    ) -> list[TemporalNode]:
         """Find events occurring at or near a specific timestamp."""
         results = []
         for node in self.nodes.values():
             if node.event_time.contains_time(timestamp):
                 results.append(node)
-            elif abs((node.event_time.start - timestamp).total_seconds()) <= tolerance.total_seconds():
+            elif (
+                abs((node.event_time.start - timestamp).total_seconds())
+                <= tolerance.total_seconds()
+            ):
                 results.append(node)
         return sorted(results, key=lambda n: abs((n.event_time.start - timestamp).total_seconds()))
 
-    def events_in_range(self, start: datetime, end: datetime) -> List[TemporalNode]:
+    def events_in_range(self, start: datetime, end: datetime) -> list[TemporalNode]:
         """Find events occurring within a time range."""
         range_interval = TimeInterval(start, end)
         results = []
@@ -264,7 +273,7 @@ class TemporalGraph:
                 results.append(node)
         return sorted(results, key=lambda n: n.event_time.start)
 
-    def events_before(self, reference: TemporalNode, limit: int = 10) -> List[TemporalNode]:
+    def events_before(self, reference: TemporalNode, limit: int = 10) -> list[TemporalNode]:
         """Find events that occurred before the reference event."""
         results = []
         for node_id, node in self.nodes.items():
@@ -276,7 +285,7 @@ class TemporalGraph:
         # Sort by time, most recent first
         return sorted(results, key=lambda n: n.event_time.start, reverse=True)[:limit]
 
-    def events_after(self, reference: TemporalNode, limit: int = 10) -> List[TemporalNode]:
+    def events_after(self, reference: TemporalNode, limit: int = 10) -> list[TemporalNode]:
         """Find events that occurred after the reference event."""
         results = []
         for node_id, node in self.nodes.items():
@@ -288,7 +297,7 @@ class TemporalGraph:
         # Sort by time, earliest first
         return sorted(results, key=lambda n: n.event_time.start)[:limit]
 
-    def events_during(self, reference: TemporalNode) -> List[TemporalNode]:
+    def events_during(self, reference: TemporalNode) -> list[TemporalNode]:
         """Find events that occurred during the reference event."""
         results = []
         for node_id, node in self.nodes.items():
@@ -299,7 +308,7 @@ class TemporalGraph:
                 results.append(node)
         return sorted(results, key=lambda n: n.event_time.start)
 
-    def events_between(self, event_a: TemporalNode, event_b: TemporalNode) -> List[TemporalNode]:
+    def events_between(self, event_a: TemporalNode, event_b: TemporalNode) -> list[TemporalNode]:
         """
         Find events that occurred between two events.
         Critical for temporal chain reasoning.
@@ -324,7 +333,7 @@ class TemporalGraph:
 
         return sorted(results, key=lambda n: n.event_time.start)
 
-    def find_by_entities(self, entity_ids: List[str]) -> List[TemporalNode]:
+    def find_by_entities(self, entity_ids: list[str]) -> list[TemporalNode]:
         """Find events involving specific entities."""
         results = []
         entity_set = set(entity_ids)
@@ -333,7 +342,7 @@ class TemporalGraph:
                 results.append(node)
         return sorted(results, key=lambda n: n.event_time.start, reverse=True)
 
-    def temporal_chain(self, entity_id: str, limit: int = 20) -> List[TemporalNode]:
+    def temporal_chain(self, entity_id: str, limit: int = 20) -> list[TemporalNode]:
         """
         Get the temporal chain of events for an entity.
         Returns events in chronological order.
@@ -341,11 +350,13 @@ class TemporalGraph:
         entity_events = [n for n in self.nodes.values() if entity_id in n.entities]
         return sorted(entity_events, key=lambda n: n.event_time.start)[:limit]
 
-    def get_node(self, node_id: str) -> Optional[TemporalNode]:
+    def get_node(self, node_id: str) -> TemporalNode | None:
         """Get a node by ID."""
         return self.nodes.get(node_id)
 
-    def get_neighbors(self, node_id: str, relation_filter: Optional[List[TemporalRelation]] = None) -> List[Tuple[TemporalNode, TemporalRelation]]:
+    def get_neighbors(
+        self, node_id: str, relation_filter: list[TemporalRelation] | None = None
+    ) -> list[tuple[TemporalNode, TemporalRelation]]:
         """Get neighboring nodes with their relations."""
         if node_id not in self.graph:
             return []
@@ -354,7 +365,7 @@ class TemporalGraph:
         for neighbor_id in self.graph.successors(node_id):
             edge_data = self.graph.get_edge_data(node_id, neighbor_id)
             if edge_data:
-                relation = edge_data.get('relation')
+                relation = edge_data.get("relation")
                 if relation_filter is None or relation in relation_filter:
                     neighbor_node = self.nodes.get(neighbor_id)
                     if neighbor_node:
@@ -362,7 +373,7 @@ class TemporalGraph:
 
         return neighbors
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph to dictionary."""
         return {
             "nodes": [
@@ -389,11 +400,11 @@ class TemporalGraph:
                     "evidence": e.evidence,
                 }
                 for e in self.edges
-            ]
+            ],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TemporalGraph":
+    def from_dict(cls, data: dict[str, Any]) -> TemporalGraph:
         """Deserialize graph from dictionary.
 
         Loads nodes without computing relations, then recomputes once.
@@ -401,9 +412,7 @@ class TemporalGraph:
         graph = cls()
         for nd in data.get("nodes", []):
             end_time = (
-                datetime.fromisoformat(nd["event_time_end"])
-                if nd.get("event_time_end")
-                else None
+                datetime.fromisoformat(nd["event_time_end"]) if nd.get("event_time_end") else None
             )
             node = TemporalNode(
                 id=nd["id"],

@@ -9,27 +9,29 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Set
+from typing import Any
+
 import networkx as nx
 
 
 @dataclass
 class CausalNode:
     """A node representing a causal event or state."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str = ""  # Description of event/state
     event_type: str = "event"  # event, state, action, condition
-    preconditions: List[str] = field(default_factory=list)  # What must be true
-    effects: List[str] = field(default_factory=list)  # What becomes true
-    memory_id: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    preconditions: list[str] = field(default_factory=list)  # What must be true
+    effects: list[str] = field(default_factory=list)  # What becomes true
+    memory_id: str | None = None
+    timestamp: datetime | None = None
     confidence: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, CausalNode):
             return self.id == other.id
         return False
@@ -38,15 +40,16 @@ class CausalNode:
 @dataclass
 class CausalEdge:
     """An edge representing causal relationship."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     cause_id: str = ""
     effect_id: str = ""
     strength: float = 1.0  # Causal strength [0, 1]
     relation_type: str = "causes"  # causes, enables, prevents, contributes_to
-    evidence: List[str] = field(default_factory=list)  # Memory IDs supporting this
-    temporal_lag: Optional[float] = None  # Time between cause and effect (seconds)
+    evidence: list[str] = field(default_factory=list)  # Memory IDs supporting this
+    temporal_lag: float | None = None  # Time between cause and effect (seconds)
     confidence: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class CausalGraph:
@@ -62,18 +65,18 @@ class CausalGraph:
 
     # Causal relation types
     RELATION_TYPES = [
-        "causes",          # Direct causation
-        "enables",         # Makes possible (necessary but not sufficient)
-        "prevents",        # Blocks effect
+        "causes",  # Direct causation
+        "enables",  # Makes possible (necessary but not sufficient)
+        "prevents",  # Blocks effect
         "contributes_to",  # Partial cause
-        "triggers",        # Immediate cause
-        "leads_to",        # Eventual outcome
+        "triggers",  # Immediate cause
+        "leads_to",  # Eventual outcome
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.graph = nx.DiGraph()
-        self.nodes: Dict[str, CausalNode] = {}
-        self.edges: Dict[str, CausalEdge] = {}
+        self.nodes: dict[str, CausalNode] = {}
+        self.edges: dict[str, CausalEdge] = {}
 
     def add_node(self, node: CausalNode) -> str:
         """Add a causal node to the graph."""
@@ -98,7 +101,7 @@ class CausalGraph:
             key=edge.id,
             strength=edge.strength,
             relation=edge.relation_type,
-            data=edge
+            data=edge,
         )
         return edge.id
 
@@ -108,16 +111,13 @@ class CausalGraph:
             return False
         try:
             # Check if there's already a path from target to source
-            return nx.has_path(self.graph, target, source)
+            return bool(nx.has_path(self.graph, target, source))
         except nx.NetworkXError:
             return False
 
     def get_causes(
-        self,
-        node_id: str,
-        max_depth: int = 3,
-        min_strength: float = 0.0
-    ) -> List[List[Tuple[CausalNode, CausalEdge]]]:
+        self, node_id: str, max_depth: int = 3, min_strength: float = 0.0
+    ) -> list[list[tuple[CausalNode, CausalEdge]]]:
         """
         Get causal chains leading to this node.
         Returns list of paths, where each path is [(node, edge), ...]
@@ -125,18 +125,18 @@ class CausalGraph:
         if node_id not in self.graph:
             return []
 
-        paths = []
+        paths: list[list[tuple[CausalNode, CausalEdge]]] = []
         self._find_cause_paths(node_id, [], paths, max_depth, min_strength, set())
         return paths
 
     def _find_cause_paths(
         self,
         current_id: str,
-        current_path: List[Tuple[CausalNode, CausalEdge]],
-        all_paths: List[List[Tuple[CausalNode, CausalEdge]]],
+        current_path: list[tuple[CausalNode, CausalEdge]],
+        all_paths: list[list[tuple[CausalNode, CausalEdge]]],
         max_depth: int,
         min_strength: float,
-        visited: Set[str]
+        visited: set[str],
     ) -> None:
         """Recursive helper to find cause paths."""
         if len(current_path) >= max_depth:
@@ -176,11 +176,8 @@ class CausalGraph:
                     )
 
     def get_effects(
-        self,
-        node_id: str,
-        max_depth: int = 3,
-        min_strength: float = 0.0
-    ) -> List[List[Tuple[CausalNode, CausalEdge]]]:
+        self, node_id: str, max_depth: int = 3, min_strength: float = 0.0
+    ) -> list[list[tuple[CausalNode, CausalEdge]]]:
         """
         Get causal chains originating from this node.
         Returns list of paths showing what this event causes.
@@ -188,18 +185,18 @@ class CausalGraph:
         if node_id not in self.graph:
             return []
 
-        paths = []
+        paths: list[list[tuple[CausalNode, CausalEdge]]] = []
         self._find_effect_paths(node_id, [], paths, max_depth, min_strength, set())
         return paths
 
     def _find_effect_paths(
         self,
         current_id: str,
-        current_path: List[Tuple[CausalNode, CausalEdge]],
-        all_paths: List[List[Tuple[CausalNode, CausalEdge]]],
+        current_path: list[tuple[CausalNode, CausalEdge]],
+        all_paths: list[list[tuple[CausalNode, CausalEdge]]],
         max_depth: int,
         min_strength: float,
-        visited: Set[str]
+        visited: set[str],
     ) -> None:
         """Recursive helper to find effect paths."""
         if len(current_path) >= max_depth:
@@ -237,7 +234,7 @@ class CausalGraph:
                         succ_id, new_path, all_paths, max_depth, min_strength, visited.copy()
                     )
 
-    def get_root_causes(self, node_id: str) -> List[CausalNode]:
+    def get_root_causes(self, node_id: str) -> list[CausalNode]:
         """Get ultimate root causes (nodes with no predecessors in cause chain)."""
         cause_paths = self.get_causes(node_id, max_depth=10)
         root_causes = []
@@ -271,7 +268,7 @@ class CausalGraph:
         for path in paths:
             strength = 1.0
             for i in range(len(path) - 1):
-                edge_data = self.graph.get_edge_data(path[i], path[i+1])
+                edge_data = self.graph.get_edge_data(path[i], path[i + 1])
                 if edge_data:
                     edge_key = list(edge_data.keys())[0]
                     edge = self.edges.get(edge_key)
@@ -282,10 +279,10 @@ class CausalGraph:
         # Combine: 1 - product of (1 - strength) for independent paths
         combined = 1.0
         for s in path_strengths:
-            combined *= (1 - s)
+            combined *= 1 - s
         return 1 - combined
 
-    def find_common_cause(self, node_ids: List[str]) -> List[CausalNode]:
+    def find_common_cause(self, node_ids: list[str]) -> list[CausalNode]:
         """Find common causes for multiple effects."""
         if not node_ids:
             return []
@@ -307,7 +304,7 @@ class CausalGraph:
 
         return [self.nodes[nid] for nid in common_ancestors if nid in self.nodes]
 
-    def what_if(self, node_id: str, prevented: bool = False) -> Dict[str, float]:
+    def what_if(self, node_id: str, prevented: bool = False) -> dict[str, float]:
         """
         Counterfactual reasoning: What would change if this event didn't happen?
 
@@ -325,11 +322,11 @@ class CausalGraph:
 
         return effects
 
-    def get_node(self, node_id: str) -> Optional[CausalNode]:
+    def get_node(self, node_id: str) -> CausalNode | None:
         """Get a node by ID."""
         return self.nodes.get(node_id)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph to dictionary."""
         return {
             "nodes": [
@@ -359,11 +356,11 @@ class CausalGraph:
                     "metadata": e.metadata,
                 }
                 for e in self.edges.values()
-            ]
+            ],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CausalGraph":
+    def from_dict(cls, data: dict[str, Any]) -> CausalGraph:
         """Deserialize graph from dictionary."""
         graph = cls()
         for nd in data.get("nodes", []):

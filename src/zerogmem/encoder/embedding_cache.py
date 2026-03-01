@@ -10,22 +10,20 @@ Key features:
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
-import os
 import pickle
-from dataclasses import dataclass, field
-from datetime import datetime
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, List, Dict, Callable, Tuple
+from typing import Any
 
 import numpy as np
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
 logger = logging.getLogger("0gmem.encoder.cache")
@@ -34,6 +32,7 @@ logger = logging.getLogger("0gmem.encoder.cache")
 @dataclass
 class CacheEntry:
     """A cached embedding entry."""
+
     text_hash: str
     embedding: np.ndarray
     model: str
@@ -44,6 +43,7 @@ class CacheEntry:
 @dataclass
 class EmbeddingCacheConfig:
     """Configuration for embedding cache."""
+
     cache_dir: str = ".cache/embeddings"
     max_memory_entries: int = 10000
     persist_to_disk: bool = True
@@ -65,15 +65,15 @@ class EmbeddingCache:
 
     def __init__(
         self,
-        config: Optional[EmbeddingCacheConfig] = None,
-        openai_client: Optional[any] = None,
-    ):
+        config: EmbeddingCacheConfig | None = None,
+        openai_client: Any | None = None,
+    ) -> None:
         self.config = config or EmbeddingCacheConfig()
         self._client = openai_client
 
         # In-memory cache: hash -> embedding
-        self._cache: Dict[str, np.ndarray] = {}
-        self._access_order: List[str] = []  # For LRU
+        self._cache: dict[str, np.ndarray] = {}
+        self._access_order: list[str] = []  # For LRU
 
         # Stats
         self.stats = {
@@ -84,27 +84,29 @@ class EmbeddingCache:
         }
 
         # Retryable exception types (set lazily on first API call)
-        self._retryable_exceptions = None
+        self._retryable_exceptions: tuple[type[Exception], ...] | None = None
 
         # Load from disk if available
         if self.config.persist_to_disk:
             self._load_cache()
 
-    def _get_client(self):
+    def _get_client(self) -> Any:
         """Get or create OpenAI client."""
         if self._client is None:
             try:
                 import openai
+
                 self._client = openai.OpenAI()
             except Exception as e:
                 logger.warning("Could not initialize OpenAI client: %s", e)
         return self._client
 
-    def _get_retryable_exceptions(self) -> tuple:
+    def _get_retryable_exceptions(self) -> tuple[type[Exception], ...]:
         """Get tuple of retryable OpenAI exception types."""
         if self._retryable_exceptions is None:
             try:
                 import openai
+
                 self._retryable_exceptions = (
                     openai.RateLimitError,
                     openai.APIConnectionError,
@@ -117,14 +119,14 @@ class EmbeddingCache:
 
     def _hash_text(self, text: str) -> str:
         """Create a stable hash for text."""
-        return hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
     def get_embedding(self, text: str) -> np.ndarray:
         """Get embedding for a single text (uses batch internally)."""
         results = self.get_embeddings([text])
         return results[0]
 
-    def get_embeddings(self, texts: List[str]) -> List[np.ndarray]:
+    def get_embeddings(self, texts: list[str]) -> list[np.ndarray]:
         """
         Get embeddings for multiple texts with caching and batching.
 
@@ -168,7 +170,7 @@ class EmbeddingCache:
 
         return results
 
-    def _batch_embed(self, texts: List[str]) -> List[np.ndarray]:
+    def _batch_embed(self, texts: list[str]) -> list[np.ndarray]:
         """Embed texts in batches using OpenAI API."""
         client = self._get_client()
         if client is None:
@@ -183,28 +185,28 @@ class EmbeddingCache:
             before_sleep=before_sleep_log(logger, logging.WARNING),
             reraise=True,
         )
-        def _call_api(input_data):
+        def _call_api(input_data: str | list[str]) -> Any:
             return client.embeddings.create(
                 model=self.config.model,
                 input=input_data,
             )
 
-        all_embeddings = []
+        all_embeddings: list[np.ndarray] = []
         batch_size = self.config.batch_size
 
         for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+            batch = texts[i : i + batch_size]
 
             try:
                 response = _call_api(batch)
                 self.stats["api_calls"] += 1
                 self.stats["texts_embedded"] += len(batch)
 
-                embeddings = [None] * len(batch)
+                embeddings: list[np.ndarray | None] = [None] * len(batch)
                 for item in response.data:
                     embeddings[item.index] = np.array(item.embedding, dtype=np.float32)
 
-                all_embeddings.extend(embeddings)
+                all_embeddings.extend(e for e in embeddings if e is not None)
 
             except Exception as e:
                 logger.error("Batch embedding failed after retries: %s", e)
@@ -218,9 +220,7 @@ class EmbeddingCache:
                             np.array(response.data[0].embedding, dtype=np.float32)
                         )
                     except Exception as e_inner:
-                        logger.error(
-                            "Individual embedding failed after retries: %s", e_inner
-                        )
+                        logger.error("Individual embedding failed after retries: %s", e_inner)
                         all_embeddings.append(self._random_embedding(text))
 
         return all_embeddings
@@ -255,7 +255,7 @@ class EmbeddingCache:
 
         if cache_path.exists():
             try:
-                with open(cache_path, 'rb') as f:
+                with open(cache_path, "rb") as f:
                     data = pickle.load(f)
                     self._cache = data.get("cache", {})
                     self._access_order = data.get("access_order", list(self._cache.keys()))
@@ -273,16 +273,19 @@ class EmbeddingCache:
         cache_path = cache_dir / "embeddings.pkl"
 
         try:
-            with open(cache_path, 'wb') as f:
-                pickle.dump({
-                    "cache": self._cache,
-                    "access_order": self._access_order,
-                }, f)
+            with open(cache_path, "wb") as f:
+                pickle.dump(
+                    {
+                        "cache": self._cache,
+                        "access_order": self._access_order,
+                    },
+                    f,
+                )
             logger.info("Saved %d embeddings to disk", len(self._cache))
         except Exception as e:
             logger.warning("Could not save embedding cache: %s", e)
 
-    def get_stats(self) -> Dict[str, any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         total_requests = self.stats["hits"] + self.stats["misses"]
         hit_rate = self.stats["hits"] / total_requests if total_requests > 0 else 0
@@ -303,8 +306,8 @@ class EmbeddingCache:
 
 
 def create_cached_embedding_fn(
-    cache: Optional[EmbeddingCache] = None,
-    config: Optional[EmbeddingCacheConfig] = None,
+    cache: EmbeddingCache | None = None,
+    config: EmbeddingCacheConfig | None = None,
 ) -> Callable[[str], np.ndarray]:
     """
     Factory function to create a cached embedding function.

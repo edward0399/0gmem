@@ -14,19 +14,18 @@ Implements seven memory types:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional, List, Dict, Any, Set
 from collections import defaultdict
+from dataclasses import dataclass
 
 
 @dataclass
 class Episode:
     """A temporal narrative sequence - what happened when."""
+
     id: str
     event: str
-    participants: List[str]
-    date: Optional[str] = None
+    participants: list[str]
+    date: str | None = None
     session_id: str = ""
     details: str = ""
 
@@ -38,6 +37,7 @@ class Episode:
 @dataclass
 class Preference:
     """A stated or inferred like/dislike."""
+
     person: str
     category: str  # food, activity, music, etc.
     item: str
@@ -51,6 +51,7 @@ class Preference:
 @dataclass
 class Relationship:
     """Interpersonal dynamics between people."""
+
     person1: str
     person2: str
     relationship_type: str  # friend, spouse, child, parent, colleague
@@ -63,6 +64,7 @@ class Relationship:
 @dataclass
 class CoreMemory:
     """High-salience important information."""
+
     person: str
     memory_type: str  # identity, major_event, life_change
     content: str
@@ -84,17 +86,17 @@ class MultiTypeMemoryStore:
     - Core memories (important high-salience info)
     """
 
-    def __init__(self):
-        self.episodes: List[Episode] = []
-        self.preferences: List[Preference] = []
-        self.relationships: List[Relationship] = []
-        self.core_memories: List[CoreMemory] = []
+    def __init__(self) -> None:
+        self.episodes: list[Episode] = []
+        self.preferences: list[Preference] = []
+        self.relationships: list[Relationship] = []
+        self.core_memories: list[CoreMemory] = []
 
         # Indices for fast lookup
-        self.episodes_by_person: Dict[str, List[Episode]] = defaultdict(list)
-        self.preferences_by_person: Dict[str, List[Preference]] = defaultdict(list)
-        self.relationships_by_person: Dict[str, List[Relationship]] = defaultdict(list)
-        self.core_by_person: Dict[str, List[CoreMemory]] = defaultdict(list)
+        self.episodes_by_person: dict[str, list[Episode]] = defaultdict(list)
+        self.preferences_by_person: dict[str, list[Preference]] = defaultdict(list)
+        self.relationships_by_person: dict[str, list[Relationship]] = defaultdict(list)
+        self.core_by_person: dict[str, list[CoreMemory]] = defaultdict(list)
 
     def add_episode(self, episode: Episode) -> None:
         """Add an episode to the store."""
@@ -180,7 +182,10 @@ class MemoryExtractor:
     ]
 
     DISLIKE_PATTERNS = [
-        (r"(?:i|we|she|he)\s+(?:really\s+)?(?:hate|dislike|can't stand)\s+(\w+(?:\s+\w+)?)", "dislike"),
+        (
+            r"(?:i|we|she|he)\s+(?:really\s+)?(?:hate|dislike|can't stand)\s+(\w+(?:\s+\w+)?)",
+            "dislike",
+        ),
         (r"(?:i|we|she|he)\s+(?:could\s+)?never\s+(?:\w+\s+)?(\w+(?:\s+\w+)?)", "dislike"),
     ]
 
@@ -210,7 +215,7 @@ class MemoryExtractor:
         (r"(?:i|we|she|he)\s+(?:had|have)\s+(\d+)\s+(?:kids?|children)", "family"),
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.memory_store = MultiTypeMemoryStore()
         self._episode_counter = 0
 
@@ -233,9 +238,9 @@ class MemoryExtractor:
 
         # Extract relationships
         for pattern, rel_type in self.RELATIONSHIP_PATTERNS:
-            match = re.search(pattern, text_lower)
-            if match:
-                groups = match.groups()
+            rel_match = re.search(pattern, text_lower)
+            if rel_match:
+                groups = rel_match.groups()
                 other_person = groups[1] if len(groups) > 1 and groups[1] else "unknown"
                 rel = Relationship(
                     person1=speaker,
@@ -261,9 +266,9 @@ class MemoryExtractor:
 
         # Extract core memories
         for pattern, mem_type in self.CORE_PATTERNS:
-            match = re.search(pattern, text_lower)
-            if match:
-                content = match.group(0)
+            core_match = re.search(pattern, text_lower)
+            if core_match:
+                content = core_match.group(0)
                 core = CoreMemory(
                     person=speaker,
                     memory_type=mem_type,

@@ -1,7 +1,6 @@
 """Tests for AttentionFilter: EverMemOS-inspired context filtering."""
 
 from dataclasses import dataclass
-from typing import List
 
 from zerogmem.retriever.attention_filter import AttentionFilter, FilterConfig
 
@@ -9,11 +8,12 @@ from zerogmem.retriever.attention_filter import AttentionFilter, FilterConfig
 @dataclass
 class MockResult:
     """Mock retrieval result for testing."""
+
     content: str
     score: float
     source: str = "semantic"
     negated: bool = False
-    entities: List[str] = None
+    entities: list[str] = None
     metadata: dict = None
 
     def __post_init__(self):

@@ -12,19 +12,22 @@ Usage:
     claude mcp add --transport stdio 0gmem -- python -m zerogmem.mcp_server
 """
 
+from __future__ import annotations
+
 import asyncio
 import atexit
 import json
+
+# MCP server must not write to stdout - use stderr for logging
+import logging
 import os
 import signal
 import sys
 import time
+import types
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
-
-# MCP server must not write to stdout - use stderr for logging
-import logging
+from typing import Any
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,17 +57,20 @@ _lock = asyncio.Lock()
 class OperationMetrics:
     """Lightweight per-operation metrics tracker."""
 
-    def __init__(self):
-        self._ops: Dict[str, dict] = {}
+    def __init__(self) -> None:
+        self._ops: dict[str, dict[str, Any]] = {}
         self._start_time = datetime.now()
 
-    def record(self, operation: str, duration_ms: float, error: bool = False):
+    def record(self, operation: str, duration_ms: float, error: bool = False) -> None:
         """Record a completed operation."""
         if operation not in self._ops:
             self._ops[operation] = {
-                "count": 0, "errors": 0,
-                "total_ms": 0.0, "last_ms": 0.0,
-                "min_ms": float("inf"), "max_ms": 0.0,
+                "count": 0,
+                "errors": 0,
+                "total_ms": 0.0,
+                "last_ms": 0.0,
+                "min_ms": float("inf"),
+                "max_ms": 0.0,
             }
         op = self._ops[operation]
         op["count"] += 1
@@ -75,9 +81,9 @@ class OperationMetrics:
         if error:
             op["errors"] += 1
 
-    def get_summary(self) -> dict:
+    def get_summary(self) -> dict[str, Any]:
         """Get metrics summary for all operations."""
-        result = {
+        result: dict[str, Any] = {
             "uptime_seconds": (datetime.now() - self._start_time).total_seconds(),
         }
         for name, op in self._ops.items():
@@ -108,7 +114,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _build_configs():
+def _build_configs() -> tuple[Any, Any, Any]:
     """Build config objects from environment variables.
 
     Returns (encoder_config, memory_config, retriever_config).
@@ -118,9 +124,7 @@ def _build_configs():
     from zerogmem.retriever.retriever import RetrieverConfig
 
     encoder_config = EncoderConfig(
-        embedding_model=os.environ.get(
-            "ZEROGMEM_EMBEDDING_MODEL", "text-embedding-3-small"
-        ),
+        embedding_model=os.environ.get("ZEROGMEM_EMBEDDING_MODEL", "text-embedding-3-small"),
         max_retries=_env_int("ZEROGMEM_API_MAX_RETRIES", 3),
     )
     memory_config = MemoryConfig(
@@ -132,6 +136,7 @@ def _build_configs():
         max_context_tokens=_env_int("ZEROGMEM_MAX_CONTEXT_TOKENS", 8000),
     )
     return encoder_config, memory_config, retriever_config
+
 
 # --- Input validation limits ---
 MAX_CONTENT_LENGTH = 50_000
@@ -146,7 +151,7 @@ MIN_MAX_RESULTS = 1
 MAX_MAX_RESULTS = 100
 
 
-def _validate_string(value: str, field_name: str, max_length: int) -> Optional[str]:
+def _validate_string(value: str, field_name: str, max_length: int) -> str | None:
     """Validate a string input. Returns error message if invalid, None if valid."""
     if not value or not value.strip():
         return f"Error: '{field_name}' must not be empty."
@@ -173,18 +178,19 @@ def _get_memory_dir() -> Path:
     return _memory_dir
 
 
-def _save_state():
+def _save_state() -> None:
     """Save current memory state to disk."""
     if _memory_manager is None:
         return
     try:
         from zerogmem.persistence import save_memory_state
+
         save_memory_state(_memory_manager, _get_memory_dir())
     except Exception as e:
         logger.error(f"Failed to save memory state: {e}")
 
 
-def _initialize_memory():
+def _initialize_memory() -> None:
     """Initialize the memory system lazily."""
     global _memory_manager, _encoder, _retriever, _initialized
 
@@ -196,7 +202,7 @@ def _initialize_memory():
     error = False
 
     try:
-        from zerogmem import MemoryManager, Encoder, Retriever
+        from zerogmem import Encoder, MemoryManager, Retriever
         from zerogmem.persistence import load_memory_state
 
         encoder_config, memory_config, retriever_config = _build_configs()
@@ -217,7 +223,8 @@ def _initialize_memory():
             logger.info("Starting with fresh memory state")
 
         _retriever = Retriever(
-            _memory_manager, embedding_fn=_encoder.get_embedding,
+            _memory_manager,
+            embedding_fn=_encoder.get_embedding,
             config=retriever_config,
         )
 
@@ -227,7 +234,7 @@ def _initialize_memory():
         # Register SIGTERM handler — atexit does NOT fire on signal
         # termination, and MCP stdio servers are killed by SIGTERM when
         # the host (e.g. Claude Code) exits.
-        def _handle_sigterm(signum, frame):
+        def _handle_sigterm(signum: int, frame: types.FrameType | None) -> None:
             logger.info("Received SIGTERM, saving state before exit...")
             _save_state()
             sys.exit(0)
@@ -246,9 +253,10 @@ def _initialize_memory():
         _metrics.record("initialize", elapsed_ms, error=error)
 
 
-def _ensure_session():
+def _ensure_session() -> None:
     """Ensure there's an active session, creating one if needed."""
     _initialize_memory()
+    assert _memory_manager is not None
     if _memory_manager.current_session_id is None:
         _memory_manager.start_session()
         logger.info("Started new memory session")
@@ -258,7 +266,7 @@ def _ensure_session():
 async def store_memory(
     speaker: str,
     content: str,
-    metadata: Optional[str] = None,
+    metadata: str | None = None,
 ) -> str:
     """Store a conversation message or fact in long-term memory.
 
@@ -269,7 +277,8 @@ async def store_memory(
     Args:
         speaker: Who said this (e.g., "user", "assistant", person's name)
         content: The message content or fact to remember
-        metadata: Optional JSON string with additional context (e.g., {"topic": "work", "importance": "high"})
+        metadata: Optional JSON string with additional context
+            (e.g., {"topic": "work", "importance": "high"})
 
     Returns:
         Confirmation message with memory ID
@@ -282,12 +291,15 @@ async def store_memory(
         if err:
             return err
         if metadata is not None and len(metadata) > MAX_METADATA_LENGTH:
-            return f"Error: 'metadata' exceeds maximum length of {MAX_METADATA_LENGTH:,} characters."
+            return (
+                f"Error: 'metadata' exceeds maximum length of {MAX_METADATA_LENGTH:,} characters."
+            )
 
         t0 = time.monotonic()
         error = False
         try:
             _ensure_session()
+            assert _memory_manager is not None
 
             # Parse metadata if provided
             meta_dict = {}
@@ -350,6 +362,7 @@ async def retrieve_memories(
         error = False
         try:
             _initialize_memory()
+            assert _retriever is not None
 
             # Retrieve relevant memories
             result = _retriever.retrieve(query)
@@ -361,12 +374,14 @@ async def retrieve_memories(
 
             # Format the response
             response_parts = [
-                f"## Retrieved Memories for: \"{query}\"\n",
+                f'## Retrieved Memories for: "{query}"\n',
                 result.composed_context,
             ]
 
             if result.results:
-                response_parts.append(f"\n---\n*Found {len(result.results)} relevant memory segments*")
+                response_parts.append(
+                    f"\n---\n*Found {len(result.results)} relevant memory segments*"
+                )
 
             logger.info(f"Retrieved {len(result.results)} memories for query: {query[:50]}...")
             return "\n".join(response_parts)
@@ -407,6 +422,7 @@ async def search_memories_by_entity(
         error = False
         try:
             _initialize_memory()
+            assert _retriever is not None
 
             # Use the retriever with an entity-focused query
             query = f"What do I know about {entity_name}?"
@@ -441,14 +457,19 @@ async def search_memories_by_time(
     "last week", "in March", or "before the meeting".
 
     Args:
-        time_description: Natural language time reference (e.g., "yesterday", "last month", "in 2024")
+        time_description: Natural language time reference
+            (e.g., "yesterday", "last month", "in 2024")
         max_results: Maximum number of results to return
 
     Returns:
         Memories from the specified time period
     """
     async with _lock:
-        err = _validate_string(time_description, "time_description", MAX_TIME_DESC_LENGTH)
+        err = _validate_string(
+            time_description,
+            "time_description",
+            MAX_TIME_DESC_LENGTH,
+        )
         if err:
             return err
         max_results = _clamp_max_results(max_results)
@@ -457,6 +478,7 @@ async def search_memories_by_time(
         error = False
         try:
             _initialize_memory()
+            assert _retriever is not None
 
             # Use temporal query
             query = f"What happened {time_description}?"
@@ -495,6 +517,7 @@ async def get_memory_summary() -> str:
         error = False
         try:
             _initialize_memory()
+            assert _memory_manager is not None
 
             stats = _memory_manager.get_stats()
 
@@ -540,8 +563,7 @@ async def get_memory_summary() -> str:
                     f"({cap['episode_utilization']:.0%})"
                 )
                 summary_parts.append(
-                    f"- Facts: {fact_count}/{cap['max_facts']} "
-                    f"({cap['fact_utilization']:.0%})"
+                    f"- Facts: {fact_count}/{cap['max_facts']} " f"({cap['fact_utilization']:.0%})"
                 )
                 summary_parts.append("")
 
@@ -567,7 +589,9 @@ async def get_memory_summary() -> str:
 
             # Current session
             if stats.get("current_session"):
-                summary_parts.append(f"### Active Session\n- Session ID: {stats['current_session']}")
+                summary_parts.append(
+                    f"### Active Session\n- Session ID: {stats['current_session']}"
+                )
 
             logger.info("Generated memory summary")
             return "\n".join(summary_parts)
@@ -596,6 +620,7 @@ async def end_conversation_session() -> str:
         error = False
         try:
             _initialize_memory()
+            assert _memory_manager is not None
 
             if _memory_manager.current_session_id is None:
                 return "No active session to end."
@@ -619,7 +644,7 @@ async def end_conversation_session() -> str:
 
 
 @mcp.tool()
-async def start_new_session(topic: Optional[str] = None) -> str:
+async def start_new_session(topic: str | None = None) -> str:
     """Start a new conversation session.
 
     Call this when starting a new conversation topic. Sessions help organize
@@ -641,6 +666,7 @@ async def start_new_session(topic: Optional[str] = None) -> str:
         error = False
         try:
             _initialize_memory()
+            assert _memory_manager is not None
 
             # End existing session if any
             if _memory_manager.current_session_id is not None:
@@ -654,7 +680,9 @@ async def start_new_session(topic: Optional[str] = None) -> str:
                 _memory_manager.add_message("system", f"Session topic: {topic}")
 
             logger.info(f"Started new session: {session_id}, topic: {topic}")
-            return f"New session started (ID: {session_id})" + (f" - Topic: {topic}" if topic else "")
+            return f"New session started (ID: {session_id})" + (
+                f" - Topic: {topic}" if topic else ""
+            )
 
         except Exception as e:
             error = True
@@ -681,7 +709,7 @@ async def clear_all_memories() -> str:
             global _memory_manager, _encoder, _retriever, _initialized
 
             # Reset the memory system with env-var configs
-            from zerogmem import MemoryManager, Encoder, Retriever
+            from zerogmem import Encoder, MemoryManager, Retriever
 
             encoder_config, memory_config, retriever_config = _build_configs()
 
@@ -689,7 +717,8 @@ async def clear_all_memories() -> str:
             _memory_manager = MemoryManager(config=memory_config)
             _memory_manager.set_embedding_function(_encoder.get_embedding)
             _retriever = Retriever(
-                _memory_manager, embedding_fn=_encoder.get_embedding,
+                _memory_manager,
+                embedding_fn=_encoder.get_embedding,
                 config=retriever_config,
             )
 
@@ -713,7 +742,7 @@ async def clear_all_memories() -> str:
 
 
 @mcp.tool()
-async def export_memory(output_path: Optional[str] = None) -> str:
+async def export_memory(output_path: str | None = None) -> str:
     """Export all memories to a portable ZIP archive for backup or migration.
 
     Creates a single .zip file containing the full memory state (structure,
@@ -730,7 +759,9 @@ async def export_memory(output_path: Optional[str] = None) -> str:
     async with _lock:
         if output_path is not None:
             if len(output_path) > MAX_PATH_LENGTH:
-                return f"Error: 'output_path' exceeds maximum length of {MAX_PATH_LENGTH} characters."
+                return (
+                    f"Error: 'output_path' exceeds maximum length of {MAX_PATH_LENGTH} characters."
+                )
             if not output_path.endswith(".zip"):
                 return "Error: 'output_path' must end with '.zip'."
 
@@ -738,6 +769,7 @@ async def export_memory(output_path: Optional[str] = None) -> str:
         error = False
         try:
             _initialize_memory()
+            assert _memory_manager is not None
 
             memory_dir = _get_memory_dir()
 
@@ -803,6 +835,7 @@ async def import_memory(archive_path: str, merge: bool = False) -> str:
         error = False
         try:
             _initialize_memory()
+            assert _encoder is not None
 
             from zerogmem.persistence import import_memory_archive, save_memory_state
 
@@ -810,16 +843,20 @@ async def import_memory(archive_path: str, merge: bool = False) -> str:
 
             restored = import_memory_archive(archive_path, _encoder.get_embedding)
             if restored is None:
-                return "Error: Failed to import archive. Check that the file is a valid 0GMem export."
+                return (
+                    "Error: Failed to import archive. Check that the file is a valid 0GMem export."
+                )
 
             # Replace current state
             _memory_manager = restored
 
             # Re-create retriever with new manager
             from zerogmem import Retriever
+
             _, _, retriever_config = _build_configs()
             _retriever = Retriever(
-                _memory_manager, embedding_fn=_encoder.get_embedding,
+                _memory_manager,
+                embedding_fn=_encoder.get_embedding,
                 config=retriever_config,
             )
 
@@ -850,7 +887,7 @@ async def import_memory(archive_path: str, merge: bool = False) -> str:
             _metrics.record("import_memory", elapsed_ms, error=error)
 
 
-def main():
+def main() -> None:
     """Run the MCP server."""
     logger.info("Starting 0GMem MCP server...")
     mcp.run(transport="stdio")

@@ -7,43 +7,45 @@ Orchestrates entity extraction, temporal extraction, and embedding generation.
 from __future__ import annotations
 
 import logging
-import os
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Callable
+from typing import Any
 
 import numpy as np
 from tenacity import (
+    before_sleep_log,
     retry,
+    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception_type,
-    before_sleep_log,
 )
 
-logger = logging.getLogger("0gmem.encoder")
-
 from zerogmem.encoder.entity_extractor import EntityExtractor, ExtractedEntity, ExtractedRelation
-from zerogmem.encoder.temporal_extractor import TemporalExtractor, TemporalExpression
-from zerogmem.graph.unified import UnifiedMemoryItem
-from zerogmem.graph.temporal import TimeInterval
+from zerogmem.encoder.temporal_extractor import TemporalExpression, TemporalExtractor
 from zerogmem.graph.entity import EntityType
+from zerogmem.graph.temporal import TimeInterval
+from zerogmem.graph.unified import UnifiedMemoryItem
+
+logger = logging.getLogger("0gmem.encoder")
 
 
 @dataclass
 class EncodingResult:
     """Result of encoding a text into memory structures."""
+
     memory_item: UnifiedMemoryItem
-    entities: List[ExtractedEntity]
-    relations: List[ExtractedRelation]
-    temporal_expressions: List[TemporalExpression]
-    negations: List[Dict[str, Any]]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    entities: list[ExtractedEntity]
+    relations: list[ExtractedRelation]
+    temporal_expressions: list[TemporalExpression]
+    negations: list[dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class EncoderConfig:
     """Configuration for the encoder."""
+
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
     use_llm_extraction: bool = False
@@ -66,8 +68,8 @@ class Encoder:
 
     def __init__(
         self,
-        config: Optional[EncoderConfig] = None,
-        embedding_fn: Optional[Callable[[str], np.ndarray]] = None,
+        config: EncoderConfig | None = None,
+        embedding_fn: Callable[[str], np.ndarray] | None = None,
     ):
         """
         Initialize the encoder.
@@ -79,7 +81,7 @@ class Encoder:
         """
         self.config = config or EncoderConfig()
         self._embedding_fn = embedding_fn
-        self._client = None
+        self._client: Any | None = None
 
         # Initialize extractors
         self.entity_extractor = EntityExtractor()
@@ -93,6 +95,7 @@ class Encoder:
         # Try to create OpenAI embedding function
         try:
             import openai
+
             self._client = openai.OpenAI()
 
             retryable_exceptions = (
@@ -111,6 +114,7 @@ class Encoder:
                 reraise=True,
             )
             def embed(text: str) -> np.ndarray:
+                assert self._client is not None
                 response = self._client.embeddings.create(
                     model=self.config.embedding_model,
                     input=text,
@@ -123,9 +127,7 @@ class Encoder:
         except ImportError:
             logger.warning("openai package not installed. Using random embeddings.")
         except Exception as e:
-            logger.warning(
-                "Could not initialize OpenAI client: %s. Using random embeddings.", e
-            )
+            logger.warning("Could not initialize OpenAI client: %s. Using random embeddings.", e)
 
         # Fallback to random embeddings ONLY for initialization failure
         def random_embed(text: str) -> np.ndarray:
@@ -138,11 +140,11 @@ class Encoder:
     def encode(
         self,
         text: str,
-        speaker: Optional[str] = None,
-        timestamp: Optional[datetime] = None,
-        session_id: Optional[str] = None,
-        reference_time: Optional[datetime] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        speaker: str | None = None,
+        timestamp: datetime | None = None,
+        session_id: str | None = None,
+        reference_time: datetime | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> EncodingResult:
         """
         Encode a text into memory structures.
@@ -248,11 +250,7 @@ class Encoder:
             metadata=metadata,
         )
 
-    def encode_batch(
-        self,
-        texts: List[str],
-        **kwargs
-    ) -> List[EncodingResult]:
+    def encode_batch(self, texts: list[str], **kwargs: Any) -> list[EncodingResult]:
         """Encode multiple texts."""
         return [self.encode(text, **kwargs) for text in texts]
 
@@ -264,10 +262,10 @@ class Encoder:
     def _compute_importance(
         self,
         text: str,
-        entities: List[ExtractedEntity],
-        relations: List[ExtractedRelation],
-        temporal_expressions: List[TemporalExpression],
-        negations: List[Dict[str, Any]],
+        entities: list[ExtractedEntity],
+        relations: list[ExtractedRelation],
+        temporal_expressions: list[TemporalExpression],
+        negations: list[dict[str, Any]],
     ) -> float:
         """
         Compute importance score for a piece of text.
@@ -294,10 +292,7 @@ class Encoder:
         # Temporal contribution
         if temporal_expressions:
             # Specific times are more important
-            specific_count = sum(
-                1 for t in temporal_expressions
-                if t.normalized_start is not None
-            )
+            specific_count = sum(1 for t in temporal_expressions if t.normalized_start is not None)
             temporal_score = min(0.15, specific_count * 0.05)
             score += temporal_score
 
@@ -317,7 +312,7 @@ class Encoder:
     def _determine_event_time(
         self,
         default_time: datetime,
-        temporal_expressions: List[TemporalExpression],
+        temporal_expressions: list[TemporalExpression],
     ) -> TimeInterval:
         """Determine the event time from temporal expressions."""
         # Look for normalized absolute/relative times
@@ -344,9 +339,9 @@ class Encoder:
     def _extract_concepts(
         self,
         text: str,
-        entities: List[ExtractedEntity],
-        relations: List[ExtractedRelation],
-    ) -> List[str]:
+        entities: list[ExtractedEntity],
+        relations: list[ExtractedRelation],
+    ) -> list[str]:
         """Extract concepts/topics from text (simplified)."""
         concepts = []
 
@@ -360,8 +355,20 @@ class Encoder:
             concepts.append(relation.predicate)
 
         # Simple keyword extraction
-        keywords = ["work", "family", "friend", "travel", "food", "hobby",
-                   "health", "money", "home", "school", "meeting", "project"]
+        keywords = [
+            "work",
+            "family",
+            "friend",
+            "travel",
+            "food",
+            "hobby",
+            "health",
+            "money",
+            "home",
+            "school",
+            "meeting",
+            "project",
+        ]
         text_lower = text.lower()
         for keyword in keywords:
             if keyword in text_lower:
@@ -369,7 +376,7 @@ class Encoder:
 
         return list(set(concepts))
 
-    def _extract_causal_hints(self, text: str) -> tuple[List[str], List[str]]:
+    def _extract_causal_hints(self, text: str) -> tuple[list[str], list[str]]:
         """Extract hints about causal relationships (simplified)."""
         causes = []
         effects = []
@@ -386,6 +393,7 @@ class Encoder:
         ]
 
         import re
+
         for pattern, rel_type in causal_patterns:
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 content = match.group(1).strip()[:100]
@@ -399,8 +407,8 @@ class Encoder:
     def _create_summary(
         self,
         text: str,
-        entities: List[ExtractedEntity],
-        relations: List[ExtractedRelation],
+        entities: list[ExtractedEntity],
+        relations: list[ExtractedRelation],
     ) -> str:
         """Create a brief summary of the text."""
         # For now, just truncate
@@ -410,8 +418,8 @@ class Encoder:
 
         # Try to end at sentence boundary
         truncated = text[:200]
-        last_period = truncated.rfind('.')
+        last_period = truncated.rfind(".")
         if last_period > 100:
-            return truncated[:last_period + 1]
+            return truncated[: last_period + 1]
 
         return truncated + "..."

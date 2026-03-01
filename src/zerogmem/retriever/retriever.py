@@ -7,37 +7,39 @@ position-aware composition to combat lost-in-the-middle.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple, Callable
+from typing import Any
+
 import numpy as np
 
 from zerogmem.memory.manager import MemoryManager
+from zerogmem.retriever.attention_filter import AttentionFilter, FilterConfig
 from zerogmem.retriever.query_analyzer import (
-    QueryAnalyzer,
     QueryAnalysis,
+    QueryAnalyzer,
     QueryIntent,
     ReasoningType,
     TemporalScope,
 )
-from zerogmem.graph.temporal import TemporalRelation
 from zerogmem.retriever.reranker import CrossEncoderReranker
-from zerogmem.retriever.attention_filter import AttentionFilter, FilterConfig
 
 
 @dataclass
 class RetrievalResult:
     """A single retrieval result."""
+
     id: str
     content: str
     score: float
     source: str  # semantic, temporal, entity, fact, episode, working_memory
-    reasoning_path: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    reasoning_path: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Additional context
-    entities: List[str] = field(default_factory=list)
-    timestamp: Optional[str] = None
+    entities: list[str] = field(default_factory=list)
+    timestamp: str | None = None
     confidence: float = 1.0
     negated: bool = False
 
@@ -45,17 +47,19 @@ class RetrievalResult:
 @dataclass
 class RetrievalResponse:
     """Complete retrieval response."""
+
     query: str
     query_analysis: QueryAnalysis
-    results: List[RetrievalResult]
+    results: list[RetrievalResult]
     composed_context: str
-    strategy_used: Dict[str, Any]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    strategy_used: dict[str, Any]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class RetrieverConfig:
     """Configuration for the retriever."""
+
     top_k: int = 20  # Increased for larger conversations
     semantic_weight: float = 0.4
     temporal_weight: float = 0.3
@@ -96,8 +100,8 @@ class Retriever:
     def __init__(
         self,
         memory_manager: MemoryManager,
-        config: Optional[RetrieverConfig] = None,
-        embedding_fn: Optional[Callable[[str], np.ndarray]] = None,
+        config: RetrieverConfig | None = None,
+        embedding_fn: Callable[[str], np.ndarray] | None = None,
     ):
         self.memory = memory_manager
         self.config = config or RetrieverConfig()
@@ -127,8 +131,8 @@ class Retriever:
     def retrieve(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        override_strategy: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
+        override_strategy: dict[str, Any] | None = None,
     ) -> RetrievalResponse:
         """
         Main retrieval method.
@@ -150,8 +154,8 @@ class Retriever:
     def _single_pass_retrieve(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        override_strategy: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
+        override_strategy: dict[str, Any] | None = None,
     ) -> RetrievalResponse:
         """Single-pass retrieval (original implementation)."""
         # Analyze query
@@ -180,9 +184,7 @@ class Retriever:
         # This removes redundant/low-relevance content that dilutes LLM attention
         pre_filter_count = len(results)
         if self.attention_filter and self.config.use_attention_filter:
-            results = self.attention_filter.filter_context(
-                query, results, query_analysis=analysis
-            )
+            results = self.attention_filter.filter_context(query, results, query_analysis=analysis)
 
         # Compose context with position-awareness
         composed_context = self._compose_context(results, analysis)
@@ -190,7 +192,7 @@ class Retriever:
         return RetrievalResponse(
             query=query,
             query_analysis=analysis,
-            results=results[:self.config.top_k],
+            results=results[: self.config.top_k],
             composed_context=composed_context,
             strategy_used=strategy,
             metadata={
@@ -205,8 +207,8 @@ class Retriever:
     def _agentic_retrieve(
         self,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        override_strategy: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
+        override_strategy: dict[str, Any] | None = None,
     ) -> RetrievalResponse:
         """
         Agentic retrieval with sufficiency checking and query rewriting.
@@ -214,9 +216,9 @@ class Retriever:
         EverMemOS-inspired: Multi-step retrieval that checks if context is sufficient
         and rewrites queries when needed.
         """
-        all_results: List[RetrievalResult] = []
-        queries_tried: List[str] = [query]
-        round_metadata: List[Dict[str, Any]] = []
+        all_results: list[RetrievalResult] = []
+        queries_tried: list[str] = [query]
+        round_metadata: list[dict[str, Any]] = []
 
         # First pass with original query
         response = self._single_pass_retrieve(query, context, override_strategy)
@@ -224,12 +226,14 @@ class Retriever:
 
         # Check sufficiency
         sufficiency = self._check_sufficiency(query, response)
-        round_metadata.append({
-            "round": 1,
-            "query": query,
-            "results_count": len(response.results),
-            "sufficiency": sufficiency,
-        })
+        round_metadata.append(
+            {
+                "round": 1,
+                "query": query,
+                "results_count": len(response.results),
+                "sufficiency": sufficiency,
+            }
+        )
 
         # Multi-round retrieval if insufficient
         for round_num in range(2, self.config.max_retrieval_rounds + 1):
@@ -260,28 +264,33 @@ class Retriever:
                     seen_ids.add(r.id)
 
             # Re-check sufficiency
-            sufficiency = self._check_sufficiency(query, RetrievalResponse(
-                query=query,
-                query_analysis=response.query_analysis,
-                results=all_results,
-                composed_context="",
-                strategy_used=response.strategy_used,
-            ))
+            sufficiency = self._check_sufficiency(
+                query,
+                RetrievalResponse(
+                    query=query,
+                    query_analysis=response.query_analysis,
+                    results=all_results,
+                    composed_context="",
+                    strategy_used=response.strategy_used,
+                ),
+            )
 
-            round_metadata.append({
-                "round": round_num,
-                "query": rewritten_query,
-                "new_results_count": len(new_response.results),
-                "total_results_count": len(all_results),
-                "sufficiency": sufficiency,
-            })
+            round_metadata.append(
+                {
+                    "round": round_num,
+                    "query": rewritten_query,
+                    "new_results_count": len(new_response.results),
+                    "total_results_count": len(all_results),
+                    "sufficiency": sufficiency,
+                }
+            )
 
         # Final ranking and composition with all accumulated results
         final_results = self._rank_results(
             all_results,
             response.query_analysis,
             response.strategy_used,
-        )[:self.config.top_k]
+        )[: self.config.top_k]
 
         composed_context = self._compose_context(final_results, response.query_analysis)
 
@@ -356,10 +365,10 @@ class Retriever:
     def _rewrite_query(
         self,
         original_query: str,
-        previous_queries: List[str],
-        current_results: List[RetrievalResult],
+        previous_queries: list[str],
+        current_results: list[RetrievalResult],
         analysis: QueryAnalysis,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Rewrite query to find missing information.
 
@@ -417,8 +426,8 @@ class Retriever:
         self,
         query: str,
         analysis: QueryAnalysis,
-        strategy: Dict[str, Any],
-    ) -> List[RetrievalResult]:
+        strategy: dict[str, Any],
+    ) -> list[RetrievalResult]:
         """Execute retrieval based on strategy."""
         # Get query embedding
         query_embedding = None
@@ -426,11 +435,13 @@ class Retriever:
             query_embedding = self._embedding_fn(query)
 
         # Collect results from each strategy separately for RRF
-        strategy_results: Dict[str, List[RetrievalResult]] = {}
+        strategy_results: dict[str, list[RetrievalResult]] = {}
 
         # 1. Semantic search - use higher limit for larger conversations
         if query_embedding is not None:
-            strategy_results["semantic"] = self._semantic_search(query_embedding, strategy.get("top_k", 30))
+            strategy_results["semantic"] = self._semantic_search(
+                query_embedding, strategy.get("top_k", 30)
+            )
 
         # 2. Entity-based search
         if strategy.get("use_entity_search") and analysis.entities:
@@ -443,9 +454,7 @@ class Retriever:
         # 4. Multi-hop graph traversal
         if strategy.get("use_graph_traversal"):
             strategy_results["graph"] = self._graph_traversal(
-                analysis,
-                query_embedding,
-                max_hops=strategy.get("max_hops", 2)
+                analysis, query_embedding, max_hops=strategy.get("max_hops", 2)
             )
 
         # 5. Fact search
@@ -456,7 +465,9 @@ class Retriever:
 
         # 7. Keyword-based search (for multi-hop and commonsense)
         if analysis.reasoning_type in [ReasoningType.MULTI_HOP, ReasoningType.COMMONSENSE]:
-            strategy_results["keyword"] = self._keyword_search(analysis.keywords + analysis.entities)
+            strategy_results["keyword"] = self._keyword_search(
+                analysis.keywords + analysis.entities
+            )
 
         # Use RRF fusion if enabled, otherwise simple merge
         if self.config.use_rrf:
@@ -477,9 +488,9 @@ class Retriever:
 
     def _rrf_fusion(
         self,
-        strategy_results: Dict[str, List[RetrievalResult]],
+        strategy_results: dict[str, list[RetrievalResult]],
         analysis: QueryAnalysis,
-    ) -> List[RetrievalResult]:
+    ) -> list[RetrievalResult]:
         """
         Reciprocal Rank Fusion (RRF) to combine results from multiple strategies.
 
@@ -494,17 +505,15 @@ class Retriever:
         strategy_weights = self._get_strategy_weights(analysis)
 
         # Build rank mappings for each strategy
-        strategy_ranks: Dict[str, Dict[str, int]] = {}
+        strategy_ranks: dict[str, dict[str, int]] = {}
         for strategy_name, results in strategy_results.items():
             # Sort by score within strategy
             sorted_results = sorted(results, key=lambda r: r.score, reverse=True)
-            strategy_ranks[strategy_name] = {
-                r.id: rank for rank, r in enumerate(sorted_results)
-            }
+            strategy_ranks[strategy_name] = {r.id: rank for rank, r in enumerate(sorted_results)}
 
         # Collect all unique document IDs
         all_doc_ids = set()
-        doc_to_result: Dict[str, RetrievalResult] = {}
+        doc_to_result: dict[str, RetrievalResult] = {}
         for results in strategy_results.values():
             for r in results:
                 all_doc_ids.add(r.id)
@@ -513,7 +522,7 @@ class Retriever:
                     doc_to_result[r.id] = r
 
         # Compute RRF scores
-        rrf_scores: Dict[str, float] = {}
+        rrf_scores: dict[str, float] = {}
         for doc_id in all_doc_ids:
             rrf_score = 0.0
             for strategy_name, ranks in strategy_ranks.items():
@@ -542,7 +551,7 @@ class Retriever:
         final_results.sort(key=lambda r: r.score, reverse=True)
         return final_results
 
-    def _get_strategy_weights(self, analysis: QueryAnalysis) -> Dict[str, float]:
+    def _get_strategy_weights(self, analysis: QueryAnalysis) -> dict[str, float]:
         """Get strategy weights based on query type."""
         # Base weights
         weights = {
@@ -569,7 +578,7 @@ class Retriever:
 
         return weights
 
-    def _get_dialogue_context(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
+    def _get_dialogue_context(self, results: list[RetrievalResult]) -> list[RetrievalResult]:
         """Get surrounding messages for dialogue context."""
         context_results = []
         seen_ids = {r.id for r in results}
@@ -577,7 +586,7 @@ class Retriever:
         # Sort memories by turn number to find adjacent messages
         sorted_memories = sorted(
             self.memory.graph.memories.values(),
-            key=lambda m: (m.session_id or "", m.turn_number or 0)
+            key=lambda m: (m.session_id or "", m.turn_number or 0),
         )
         memory_list = list(sorted_memories)
         id_to_idx = {m.id: i for i, m in enumerate(memory_list)}
@@ -592,18 +601,24 @@ class Retriever:
                         adj_memory = memory_list[adj_idx]
                         if adj_memory.id not in seen_ids:
                             seen_ids.add(adj_memory.id)
-                            context_results.append(RetrievalResult(
-                                id=adj_memory.id,
-                                content=adj_memory.content,
-                                score=result.score * 0.8,  # Slightly lower score
-                                source="dialogue_context",
-                                entities=adj_memory.entity_names,
-                                timestamp=adj_memory.event_time.start.isoformat() if adj_memory.event_time else None,
-                            ))
+                            context_results.append(
+                                RetrievalResult(
+                                    id=adj_memory.id,
+                                    content=adj_memory.content,
+                                    score=result.score * 0.8,  # Slightly lower score
+                                    source="dialogue_context",
+                                    entities=adj_memory.entity_names,
+                                    timestamp=(
+                                        adj_memory.event_time.start.isoformat()
+                                        if adj_memory.event_time
+                                        else None
+                                    ),
+                                )
+                            )
 
         return context_results
 
-    def _keyword_search(self, keywords: List[str]) -> List[RetrievalResult]:
+    def _keyword_search(self, keywords: list[str]) -> list[RetrievalResult]:
         """Search for memories containing specific keywords."""
         results = []
         seen_ids = set()
@@ -615,60 +630,62 @@ class Retriever:
             if matches > 0:
                 if memory.id not in seen_ids:
                     seen_ids.add(memory.id)
-                    results.append(RetrievalResult(
-                        id=memory.id,
-                        content=memory.content,
-                        score=0.5 + (matches * 0.1),  # Base score + keyword match bonus
-                        source="keyword",
-                        entities=memory.entity_names,
-                        timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                    ))
+                    results.append(
+                        RetrievalResult(
+                            id=memory.id,
+                            content=memory.content,
+                            score=0.5 + (matches * 0.1),  # Base score + keyword match bonus
+                            source="keyword",
+                            entities=memory.entity_names,
+                            timestamp=(
+                                memory.event_time.start.isoformat() if memory.event_time else None
+                            ),
+                        )
+                    )
 
         return results
 
     def _semantic_search(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 20
-    ) -> List[RetrievalResult]:
+        self, query_embedding: np.ndarray, top_k: int = 20
+    ) -> list[RetrievalResult]:
         """Semantic similarity search."""
         results = []
 
         # Search unified graph
-        similar = self.memory.graph.query_by_similarity(
-            query_embedding, top_k=top_k
-        )
+        similar = self.memory.graph.query_by_similarity(query_embedding, top_k=top_k)
 
         for memory, score in similar:
-            results.append(RetrievalResult(
-                id=memory.id,
-                content=memory.content,
-                score=score,
-                source="semantic",
-                entities=memory.entity_names,
-                timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                metadata={"original_score": score},
-            ))
+            results.append(
+                RetrievalResult(
+                    id=memory.id,
+                    content=memory.content,
+                    score=score,
+                    source="semantic",
+                    entities=memory.entity_names,
+                    timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
+                    metadata={"original_score": score},
+                )
+            )
 
         # Search episodic memory
-        episodes = self.memory.episodic_memory.search_similar(
-            query_embedding, top_k=top_k // 2
-        )
+        episodes = self.memory.episodic_memory.search_similar(query_embedding, top_k=top_k // 2)
 
         for episode, score in episodes:
-            results.append(RetrievalResult(
-                id=episode.id,
-                content=episode.summary or episode.get_full_text()[:500],
-                score=score * 0.9,  # Slightly lower weight for episodes
-                source="episode",
-                entities=episode.participant_names,
-                timestamp=episode.start_time.isoformat(),
-                metadata={"episode_id": episode.id, "message_count": episode.message_count},
-            ))
+            results.append(
+                RetrievalResult(
+                    id=episode.id,
+                    content=episode.summary or episode.get_full_text()[:500],
+                    score=score * 0.9,  # Slightly lower weight for episodes
+                    source="episode",
+                    entities=episode.participant_names,
+                    timestamp=episode.start_time.isoformat(),
+                    metadata={"episode_id": episode.id, "message_count": episode.message_count},
+                )
+            )
 
         return results
 
-    def _entity_search(self, entities: List[str]) -> List[RetrievalResult]:
+    def _entity_search(self, entities: list[str]) -> list[RetrievalResult]:
         """Search by entity mentions."""
         results = []
 
@@ -681,15 +698,19 @@ class Retriever:
                 memories = self.memory.graph.query_by_entity(entity.id)
 
                 for memory in memories[:5]:  # Limit per entity
-                    results.append(RetrievalResult(
-                        id=memory.id,
-                        content=memory.content,
-                        score=0.7,  # Base score for entity match
-                        source="entity",
-                        entities=[entity_name],
-                        timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                        reasoning_path=[f"entity:{entity_name}"],
-                    ))
+                    results.append(
+                        RetrievalResult(
+                            id=memory.id,
+                            content=memory.content,
+                            score=0.7,  # Base score for entity match
+                            source="entity",
+                            entities=[entity_name],
+                            timestamp=(
+                                memory.event_time.start.isoformat() if memory.event_time else None
+                            ),
+                            reasoning_path=[f"entity:{entity_name}"],
+                        )
+                    )
 
                 # Get entity profile as context
                 profile = self.memory.graph.entity_graph.get_entity_profile(entity.id)
@@ -697,17 +718,19 @@ class Retriever:
                     profile_text = f"{entity_name}: " + ", ".join(
                         f"{r['relation']} {r['entity']}" for r in profile["relations"][:5]
                     )
-                    results.append(RetrievalResult(
-                        id=f"profile_{entity.id}",
-                        content=profile_text,
-                        score=0.6,
-                        source="entity_profile",
-                        entities=[entity_name],
-                    ))
+                    results.append(
+                        RetrievalResult(
+                            id=f"profile_{entity.id}",
+                            content=profile_text,
+                            score=0.6,
+                            source="entity_profile",
+                            entities=[entity_name],
+                        )
+                    )
 
         return results
 
-    def _temporal_search(self, analysis: QueryAnalysis) -> List[RetrievalResult]:
+    def _temporal_search(self, analysis: QueryAnalysis) -> list[RetrievalResult]:
         """Search based on temporal constraints."""
         results = []
 
@@ -718,45 +741,50 @@ class Retriever:
                 memories = self.memory.graph.query_by_time(
                     expr.normalized_start,
                     expr.normalized_end,
-                    entities=analysis.entities if analysis.entities else None
+                    entities=analysis.entities if analysis.entities else None,
                 )
 
                 for memory in memories[:10]:
-                    results.append(RetrievalResult(
-                        id=memory.id,
-                        content=memory.content,
-                        score=0.8,
-                        source="temporal",
-                        entities=memory.entity_names,
-                        timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                        reasoning_path=[f"temporal:{expr.text}"],
-                    ))
+                    results.append(
+                        RetrievalResult(
+                            id=memory.id,
+                            content=memory.content,
+                            score=0.8,
+                            source="temporal",
+                            entities=memory.entity_names,
+                            timestamp=(
+                                memory.event_time.start.isoformat() if memory.event_time else None
+                            ),
+                            reasoning_path=[f"temporal:{expr.text}"],
+                        )
+                    )
 
         # Handle relative temporal queries
         if analysis.temporal_scope == TemporalScope.RELATIVE and analysis.entities:
             for entity in analysis.entities:
                 chain = self.memory.graph.find_temporal_chain(entity)
                 for memory in chain[:10]:
-                    results.append(RetrievalResult(
-                        id=memory.id,
-                        content=memory.content,
-                        score=0.75,
-                        source="temporal_chain",
-                        entities=memory.entity_names,
-                        timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                        reasoning_path=[f"temporal_chain:{entity}"],
-                    ))
+                    results.append(
+                        RetrievalResult(
+                            id=memory.id,
+                            content=memory.content,
+                            score=0.75,
+                            source="temporal_chain",
+                            entities=memory.entity_names,
+                            timestamp=(
+                                memory.event_time.start.isoformat() if memory.event_time else None
+                            ),
+                            reasoning_path=[f"temporal_chain:{entity}"],
+                        )
+                    )
 
         return results
 
     def _graph_traversal(
-        self,
-        analysis: QueryAnalysis,
-        query_embedding: Optional[np.ndarray],
-        max_hops: int = 2
-    ) -> List[RetrievalResult]:
+        self, analysis: QueryAnalysis, query_embedding: np.ndarray | None, max_hops: int = 2
+    ) -> list[RetrievalResult]:
         """Multi-hop graph traversal for complex queries."""
-        results = []
+        results: list[RetrievalResult] = []
 
         if not analysis.entities:
             return results
@@ -766,97 +794,94 @@ class Retriever:
             start_entities=analysis.entities,
             query_embedding=query_embedding,
             max_hops=max_hops,
-            top_k=15
+            top_k=15,
         )
 
         for memory, score, path in multi_hop_results:
-            results.append(RetrievalResult(
-                id=memory.id,
-                content=memory.content,
-                score=score,
-                source="graph_traversal",
-                entities=memory.entity_names,
-                timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
-                reasoning_path=path,
-                metadata={"hop_count": len(path)},
-            ))
+            results.append(
+                RetrievalResult(
+                    id=memory.id,
+                    content=memory.content,
+                    score=score,
+                    source="graph_traversal",
+                    entities=memory.entity_names,
+                    timestamp=memory.event_time.start.isoformat() if memory.event_time else None,
+                    reasoning_path=path,
+                    metadata={"hop_count": len(path)},
+                )
+            )
 
         return results
 
     def _fact_search(
-        self,
-        query_embedding: Optional[np.ndarray],
-        analysis: QueryAnalysis
-    ) -> List[RetrievalResult]:
+        self, query_embedding: np.ndarray | None, analysis: QueryAnalysis
+    ) -> list[RetrievalResult]:
         """Search semantic facts."""
         results = []
 
         # Semantic search on facts
         if query_embedding is not None:
-            similar_facts = self.memory.semantic_memory.search_similar(
-                query_embedding, top_k=10
-            )
+            similar_facts = self.memory.semantic_memory.search_similar(query_embedding, top_k=10)
 
             for fact, score in similar_facts:
-                results.append(RetrievalResult(
-                    id=fact.id,
-                    content=fact.content,
-                    score=score * fact.confidence,
-                    source="fact",
-                    confidence=fact.confidence,
-                    negated=fact.negated,
-                    metadata={
-                        "subject": fact.subject,
-                        "predicate": fact.predicate,
-                        "object": fact.object,
-                        "confirmations": fact.confirmation_count,
-                    },
-                ))
+                results.append(
+                    RetrievalResult(
+                        id=fact.id,
+                        content=fact.content,
+                        score=score * fact.confidence,
+                        source="fact",
+                        confidence=fact.confidence,
+                        negated=fact.negated,
+                        metadata={
+                            "subject": fact.subject,
+                            "predicate": fact.predicate,
+                            "object": fact.object,
+                            "confirmations": fact.confirmation_count,
+                        },
+                    )
+                )
 
         # Search facts about entities
         for entity in analysis.entities:
-            facts = self.memory.semantic_memory.get_facts_about(
-                entity, include_negated=True
-            )
+            facts = self.memory.semantic_memory.get_facts_about(entity, include_negated=True)
 
             for fact in facts[:5]:
-                results.append(RetrievalResult(
-                    id=fact.id,
-                    content=fact.content,
-                    score=0.7 * fact.confidence,
-                    source="entity_fact",
-                    entities=[entity],
-                    confidence=fact.confidence,
-                    negated=fact.negated,
-                ))
+                results.append(
+                    RetrievalResult(
+                        id=fact.id,
+                        content=fact.content,
+                        score=0.7 * fact.confidence,
+                        source="entity_fact",
+                        entities=[entity],
+                        confidence=fact.confidence,
+                        negated=fact.negated,
+                    )
+                )
 
         return results
 
-    def _working_memory_search(
-        self,
-        query_embedding: Optional[np.ndarray]
-    ) -> List[RetrievalResult]:
+    def _working_memory_search(self, query_embedding: np.ndarray | None) -> list[RetrievalResult]:
         """Search working memory for recent context."""
         results = []
 
         wm_items = self.memory.working_memory.get_context(query_embedding, top_k=5)
 
         for item in wm_items:
-            results.append(RetrievalResult(
-                id=item.id,
-                content=item.content,
-                score=0.9 * item.attention_weight,  # High weight for working memory
-                source="working_memory",
-                metadata={"attention": item.attention_weight},
-            ))
+            results.append(
+                RetrievalResult(
+                    id=item.id,
+                    content=item.content,
+                    score=0.9 * item.attention_weight,  # High weight for working memory
+                    source="working_memory",
+                    metadata={"attention": item.attention_weight},
+                )
+            )
 
         return results
 
     def _verify_negations(
-        self,
-        results: List[RetrievalResult],
-        analysis: QueryAnalysis
-    ) -> List[RetrievalResult]:
+        self, results: list[RetrievalResult], analysis: QueryAnalysis
+    ) -> list[RetrievalResult]:
         """Verify and flag negations for adversarial robustness."""
         import re
 
@@ -880,21 +905,23 @@ class Retriever:
             # Check if relevant to query
             query_lower = analysis.original_query.lower()
             fact_relevant = (
-                any(e.lower() in fact.subject.lower() for e in analysis.entities) or
-                any(e.lower() in fact.object.lower() for e in analysis.entities) or
-                fact.object.lower() in query_lower or
-                fact.subject.lower() in query_lower
+                any(e.lower() in fact.subject.lower() for e in analysis.entities)
+                or any(e.lower() in fact.object.lower() for e in analysis.entities)
+                or fact.object.lower() in query_lower
+                or fact.subject.lower() in query_lower
             )
 
             if fact_relevant:
-                results.append(RetrievalResult(
-                    id=fact.id,
-                    content=f"IMPORTANT: {fact.content}",
-                    score=1.5,  # High score for relevant negations
-                    source="negation",
-                    negated=True,
-                    confidence=1.0,
-                ))
+                results.append(
+                    RetrievalResult(
+                        id=fact.id,
+                        content=f"IMPORTANT: {fact.content}",
+                        score=1.5,  # High score for relevant negations
+                        source="negation",
+                        negated=True,
+                        confidence=1.0,
+                    )
+                )
 
         # CRITICAL: Search raw memories for negation patterns
         # This catches "I could never eat X" type statements
@@ -916,41 +943,46 @@ class Retriever:
                 if re.search(pattern, content_lower):
                     # Check relevance to query
                     content_keywords = set(content_lower.split())
-                    if query_keywords.intersection(content_keywords) or \
-                       any(kw in content_lower for kw in analysis.keywords):
-                        results.append(RetrievalResult(
-                            id=f"neg_{memory.id}",
-                            content=f"[NEGATION DETECTED] {memory.content}",
-                            score=1.8,  # Very high score for detected negations
-                            source="negation_detected",
-                            negated=True,
-                            confidence=1.0,
-                            metadata={"pattern_matched": pattern},
-                        ))
+                    if query_keywords.intersection(content_keywords) or any(
+                        kw in content_lower for kw in analysis.keywords
+                    ):
+                        results.append(
+                            RetrievalResult(
+                                id=f"neg_{memory.id}",
+                                content=f"[NEGATION DETECTED] {memory.content}",
+                                score=1.8,  # Very high score for detected negations
+                                source="negation_detected",
+                                negated=True,
+                                confidence=1.0,
+                                metadata={"pattern_matched": pattern},
+                            )
+                        )
                         break  # Only add once per memory
 
         # Also check negated_facts stored in memories
         for memory in self.memory.graph.memories.values():
             if memory.negated_facts:
-                for neg_fact in memory.negated_facts:
-                    if any(kw in neg_fact.lower() for kw in analysis.keywords):
-                        results.append(RetrievalResult(
-                            id=f"memfact_{memory.id}",
-                            content=f"[STATED AS FALSE] {neg_fact}",
-                            score=1.6,
-                            source="memory_negation",
-                            negated=True,
-                            confidence=1.0,
-                        ))
+                for neg_text in memory.negated_facts:
+                    if any(kw in neg_text.lower() for kw in analysis.keywords):
+                        results.append(
+                            RetrievalResult(
+                                id=f"memfact_{memory.id}",
+                                content=f"[STATED AS FALSE] {neg_text}",
+                                score=1.6,
+                                source="memory_negation",
+                                negated=True,
+                                confidence=1.0,
+                            )
+                        )
 
         return results
 
     def _rank_results(
         self,
-        results: List[RetrievalResult],
+        results: list[RetrievalResult],
         analysis: QueryAnalysis,
-        strategy: Dict[str, Any],
-    ) -> List[RetrievalResult]:
+        strategy: dict[str, Any],
+    ) -> list[RetrievalResult]:
         """Rank results based on multiple factors."""
         import re
 
@@ -958,10 +990,9 @@ class Retriever:
         query_lower = analysis.original_query.lower()
 
         # More precise detection of preference questions
-        is_preference_question = bool(re.search(
-            r'\b(like|love|enjoy|hate|prefer|favorite|fan of)\b',
-            query_lower
-        )) and query_lower.startswith(("do ", "does ", "did ", "is ", "are ", "can ", "could "))
+        is_preference_question = bool(
+            re.search(r"\b(like|love|enjoy|hate|prefer|favorite|fan of)\b", query_lower)
+        ) and query_lower.startswith(("do ", "does ", "did ", "is ", "are ", "can ", "could "))
 
         # Factual questions should NOT be treated as yes/no
         is_factual = query_lower.startswith(("what ", "where ", "when ", "who ", "which ", "how "))
@@ -977,7 +1008,9 @@ class Retriever:
                 "fact": 1.0,
                 "temporal": 0.9 if analysis.reasoning_type == ReasoningType.TEMPORAL else 0.7,
                 "entity": 0.8,
-                "graph_traversal": 0.9 if analysis.reasoning_type == ReasoningType.MULTI_HOP else 0.7,
+                "graph_traversal": (
+                    0.9 if analysis.reasoning_type == ReasoningType.MULTI_HOP else 0.7
+                ),
                 "episode": 0.8,
                 "entity_profile": 0.6,
                 "negation": 1.2,  # Moderate boost
@@ -990,7 +1023,7 @@ class Retriever:
             # Boost for entity matches
             if result.entities:
                 entity_overlap = len(set(result.entities) & set(analysis.entities))
-                final_score *= (1 + 0.1 * entity_overlap)
+                final_score *= 1 + 0.1 * entity_overlap
 
             # Boost for recency (if timestamp available)
             if result.timestamp:
@@ -998,8 +1031,8 @@ class Retriever:
                     ts = datetime.fromisoformat(result.timestamp)
                     age_days = (datetime.now() - ts).days
                     recency_factor = max(0.5, 1 - age_days / 365)
-                    final_score *= (1 + self.config.recency_weight * recency_factor)
-                except:
+                    final_score *= 1 + self.config.recency_weight * recency_factor
+                except Exception:
                     pass
 
             # Penalty for low confidence
@@ -1018,11 +1051,15 @@ class Retriever:
                     final_score *= 0.9
 
             # Temporal alignment boost for temporal queries
-            if analysis.temporal_scope != TemporalScope.NONE or analysis.reasoning_type == ReasoningType.TEMPORAL:
+            if (
+                analysis.temporal_scope != TemporalScope.NONE
+                or analysis.reasoning_type == ReasoningType.TEMPORAL
+            ):
                 has_time_signal = bool(result.timestamp)
                 if result.metadata:
                     has_time_signal = has_time_signal or any(
-                        k in result.metadata for k in ["session_idx", "session_timestamp", "resolved_dates"]
+                        k in result.metadata
+                        for k in ["session_idx", "session_timestamp", "resolved_dates"]
                     )
                 if has_time_signal:
                     final_score *= 1.15
@@ -1035,7 +1072,7 @@ class Retriever:
         results.sort(key=lambda r: r.score, reverse=True)
         return results
 
-    def _apply_reranker(self, query: str, results: List[RetrievalResult]) -> List[RetrievalResult]:
+    def _apply_reranker(self, query: str, results: list[RetrievalResult]) -> list[RetrievalResult]:
         """Re-rank top candidates with a cross-encoder."""
         if not self.reranker or not results:
             return results
@@ -1062,11 +1099,11 @@ class Retriever:
         for r, ns in zip(top, norm_scores):
             r.metadata["rerank_score"] = ns
             # Scale existing score by reranker signal
-            r.score *= (1.0 + weight * (ns - 0.5) * 2.0)
+            r.score *= 1.0 + weight * (ns - 0.5) * 2.0
 
         return results
 
-    def _deduplicate(self, results: List[RetrievalResult]) -> List[RetrievalResult]:
+    def _deduplicate(self, results: list[RetrievalResult]) -> list[RetrievalResult]:
         """Remove duplicate results."""
         seen_ids = set()
         unique = []
@@ -1080,7 +1117,7 @@ class Retriever:
 
     def _compose_context(
         self,
-        results: List[RetrievalResult],
+        results: list[RetrievalResult],
         analysis: QueryAnalysis,
     ) -> str:
         """
@@ -1096,15 +1133,16 @@ class Retriever:
 
         if not self.config.use_position_aware_composition:
             # Simple composition
-            return "\n\n".join(r.content for r in results[:self.config.top_k])
+            return "\n\n".join(r.content for r in results[: self.config.top_k])
 
         # Determine if this is a preference/adversarial question
         query_lower = analysis.original_query.lower()
-        is_preference_question = bool(re.search(
-            r'\b(like|love|enjoy|hate|prefer|favorite|fan of|escargot|snail)\b',
-            query_lower
-        ))
-        is_factual_question = query_lower.startswith(("what ", "where ", "when ", "who ", "which ", "how "))
+        is_preference_question = bool(
+            re.search(
+                r"\b(like|love|enjoy|hate|prefer|favorite|fan of|escargot|snail)\b", query_lower
+            )
+        )
+        query_lower.startswith(("what ", "where ", "when ", "who ", "which ", "how "))
 
         # Position-aware composition
         parts = []
@@ -1116,7 +1154,11 @@ class Retriever:
         if is_preference_question and negation_results:
             parts.append("## IMPORTANT - Stated Preferences/Dislikes:")
             for r in negation_results[:3]:
-                content = r.content.replace("[NEGATION DETECTED]", "").replace("[STATED AS FALSE]", "").strip()
+                content = (
+                    r.content.replace("[NEGATION DETECTED]", "")
+                    .replace("[STATED AS FALSE]", "")
+                    .strip()
+                )
                 parts.append(f"- {content}")
             parts.append("")
 
@@ -1129,13 +1171,16 @@ class Retriever:
         if is_multi_hop:
             sorted_results = sorted(
                 non_negation_results,
-                key=lambda r: self.memory.graph.memories.get(r.id, type('obj', (object,), {'turn_number': 9999})()).turn_number or 9999
+                key=lambda r: self.memory.graph.memories.get(
+                    r.id, type("obj", (object,), {"turn_number": 9999})()
+                ).turn_number
+                or 9999,
             )
             non_negation_results = sorted_results
 
         # SANDWICH COMPOSITION: Put high-relevance at beginning AND end
         # This combats "lost in the middle" problem where LLMs forget middle content
-        all_results = non_negation_results[:max_results + 5]  # Get more for sandwiching
+        all_results = non_negation_results[: max_results + 5]  # Get more for sandwiching
 
         if len(all_results) >= 5:
             # Top 3 results at beginning (most important)
@@ -1171,21 +1216,27 @@ class Retriever:
                 parts.append(f"- {content}")
 
         # Additional context beyond sandwich
-        remaining = non_negation_results[max_results + 5:]
+        remaining = non_negation_results[max_results + 5 :]
         if remaining:
             parts.append("\n## More Context")
             for i, r in enumerate(remaining[:3], 1):
                 content = self._format_result_content(r)[:200]
                 parts.append(f"[{i}] {content}")
 
-        # For NON-preference factual questions, only include negations if they seem directly relevant
+        # For NON-preference factual questions, only include
+        # negations if they seem directly relevant
         if not is_preference_question and negation_results:
             # Check if negation mentions keywords from the question
             relevant_negations = []
             for r in negation_results:
                 # Check if any non-trivial query word appears in the negation
-                query_words = [w for w in query_lower.split() if len(w) > 3 and w not in
-                              {'what', 'where', 'when', 'does', 'were', 'that', 'this', 'with', 'from'}]
+                query_words = [
+                    w
+                    for w in query_lower.split()
+                    if len(w) > 3
+                    and w
+                    not in {"what", "where", "when", "does", "were", "that", "this", "with", "from"}
+                ]
                 if any(word in r.content.lower() for word in query_words):
                     relevant_negations.append(r)
 
@@ -1215,7 +1266,11 @@ class Retriever:
 
     def _format_result_content(self, result: RetrievalResult) -> str:
         """Format retrieval result with optional speaker/time metadata."""
-        content = result.content.replace("[NEGATION DETECTED]", "").replace("[STATED AS FALSE]", "").strip()
+        content = (
+            result.content.replace("[NEGATION DETECTED]", "")
+            .replace("[STATED AS FALSE]", "")
+            .strip()
+        )
 
         memory = self.memory.graph.memories.get(result.id)
         if not memory:
@@ -1237,7 +1292,7 @@ class Retriever:
     def retrieve_for_question(
         self,
         question: str,
-        conversation_history: Optional[List[Dict[str, str]]] = None,
+        conversation_history: list[dict[str, str]] | None = None,
     ) -> str:
         """
         Convenience method for question answering.

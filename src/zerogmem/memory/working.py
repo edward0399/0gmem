@@ -8,23 +8,25 @@ and attention-based decay, analogous to human working memory.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from datetime import datetime
+from typing import Any
+
 import numpy as np
 
 
 @dataclass
 class WorkingMemoryItem:
     """An item in working memory."""
+
     id: str
     content: str
-    embedding: Optional[np.ndarray] = None
-    source_memory_id: Optional[str] = None  # Reference to long-term memory
+    embedding: np.ndarray | None = None
+    source_memory_id: str | None = None  # Reference to long-term memory
     attention_weight: float = 1.0
     added_at: datetime = field(default_factory=datetime.now)
     last_accessed: datetime = field(default_factory=datetime.now)
     access_count: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def decay(self, rate: float = 0.1, time_factor: float = 1.0) -> None:
         """Apply attention decay based on time and rate."""
@@ -51,16 +53,13 @@ class WorkingMemory:
     """
 
     def __init__(
-        self,
-        capacity: int = 20,
-        decay_rate: float = 0.05,
-        eviction_threshold: float = 0.1
+        self, capacity: int = 20, decay_rate: float = 0.05, eviction_threshold: float = 0.1
     ):
         self.capacity = capacity
         self.decay_rate = decay_rate
         self.eviction_threshold = eviction_threshold
-        self.items: List[WorkingMemoryItem] = []
-        self._item_index: Dict[str, WorkingMemoryItem] = {}
+        self.items: list[WorkingMemoryItem] = []
+        self._item_index: dict[str, WorkingMemoryItem] = {}
 
     def add(self, item: WorkingMemoryItem, force: bool = False) -> bool:
         """
@@ -94,25 +93,20 @@ class WorkingMemory:
         self._item_index[item.id] = item
         return True
 
-    def get(self, item_id: str) -> Optional[WorkingMemoryItem]:
+    def get(self, item_id: str) -> WorkingMemoryItem | None:
         """Get an item by ID, boosting its attention."""
         item = self._item_index.get(item_id)
         if item:
             item.boost()
         return item
 
-    def get_all(self, min_attention: float = 0.0) -> List[WorkingMemoryItem]:
+    def get_all(self, min_attention: float = 0.0) -> list[WorkingMemoryItem]:
         """Get all items above minimum attention threshold."""
-        return [
-            item for item in self.items
-            if item.attention_weight >= min_attention
-        ]
+        return [item for item in self.items if item.attention_weight >= min_attention]
 
     def get_context(
-        self,
-        query_embedding: Optional[np.ndarray] = None,
-        top_k: int = 10
-    ) -> List[WorkingMemoryItem]:
+        self, query_embedding: np.ndarray | None = None, top_k: int = 10
+    ) -> list[WorkingMemoryItem]:
         """
         Get relevant working memory items for current context.
 
@@ -229,7 +223,7 @@ class WorkingMemory:
         """Check if working memory is at capacity."""
         return len(self.items) >= self.capacity
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about working memory."""
         if not self.items:
             return {

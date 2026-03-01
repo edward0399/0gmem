@@ -11,28 +11,31 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any, Tuple
-from dateutil import parser as date_parser
-from dateutil.relativedelta import relativedelta
+from typing import Any
+
+from dateutil import parser as date_parser  # type: ignore[import-untyped]
+from dateutil.relativedelta import relativedelta  # type: ignore[import-untyped]
 
 
 @dataclass
 class ResolvedDate:
     """A resolved absolute date from a relative expression."""
+
     original_text: str
     resolved_date: datetime
     confidence: float
     resolution_method: str  # "relative", "absolute", "inferred"
-    context: Optional[str] = None
+    context: str | None = None
 
 
 @dataclass
 class TemporalContext:
     """Temporal context for a message or conversation."""
-    session_date: Optional[datetime] = None
-    message_dates: List[ResolvedDate] = field(default_factory=list)
-    event_dates: Dict[str, datetime] = field(default_factory=dict)
-    date_references: List[str] = field(default_factory=list)
+
+    session_date: datetime | None = None
+    message_dates: list[ResolvedDate] = field(default_factory=list)
+    event_dates: dict[str, datetime] = field(default_factory=dict)
+    date_references: list[str] = field(default_factory=list)
 
 
 class TemporalResolver:
@@ -57,7 +60,6 @@ class TemporalResolver:
         (r"\bthe other day\b", -2, "day"),
         (r"\ba few days ago\b", -3, "day"),
         (r"\bseveral days ago\b", -4, "day"),
-
         # Weeks
         (r"\blast week\b", -1, "week"),
         (r"\bthis week\b", 0, "week"),
@@ -65,13 +67,11 @@ class TemporalResolver:
         (r"\bthe week before\b", -1, "week"),
         (r"\ba week ago\b", -1, "week"),
         (r"\btwo weeks ago\b", -2, "week"),
-
         # Months
         (r"\blast month\b", -1, "month"),
         (r"\bthis month\b", 0, "month"),
         (r"\bnext month\b", 1, "month"),
         (r"\ba month ago\b", -1, "month"),
-
         # Years
         (r"\blast year\b", -1, "year"),
         (r"\bthis year\b", 0, "year"),
@@ -88,24 +88,47 @@ class TemporalResolver:
 
     # Day of week patterns
     DAY_OF_WEEK_MAP = {
-        "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-        "friday": 4, "saturday": 5, "sunday": 6,
+        "monday": 0,
+        "tuesday": 1,
+        "wednesday": 2,
+        "thursday": 3,
+        "friday": 4,
+        "saturday": 5,
+        "sunday": 6,
     }
 
     # Month patterns
     MONTH_MAP = {
-        "january": 1, "february": 2, "march": 3, "april": 4,
-        "may": 5, "june": 6, "july": 7, "august": 8,
-        "september": 9, "october": 10, "november": 11, "december": 12,
-        "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6,
-        "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+        "january": 1,
+        "february": 2,
+        "march": 3,
+        "april": 4,
+        "may": 5,
+        "june": 6,
+        "july": 7,
+        "august": 8,
+        "september": 9,
+        "october": 10,
+        "november": 11,
+        "december": 12,
+        "jan": 1,
+        "feb": 2,
+        "mar": 3,
+        "apr": 4,
+        "jun": 6,
+        "jul": 7,
+        "aug": 8,
+        "sep": 9,
+        "oct": 10,
+        "nov": 11,
+        "dec": 12,
     }
 
     def __init__(self, default_year: int = 2023):
         """Initialize with default year for incomplete dates."""
         self.default_year = default_year
 
-    def parse_session_timestamp(self, timestamp_str: str) -> Optional[datetime]:
+    def parse_session_timestamp(self, timestamp_str: str) -> datetime | None:
         """
         Parse session timestamp from LoCoMo format.
 
@@ -121,12 +144,12 @@ class TemporalResolver:
 
         # Try common formats
         formats = [
-            "%d %B %Y",      # 8 May 2023
-            "%d %b %Y",      # 8 May 2023 (short month)
-            "%B %d, %Y",     # May 8, 2023
-            "%Y-%m-%d",      # 2023-05-08
-            "%m/%d/%Y",      # 05/08/2023
-            "%d/%m/%Y",      # 08/05/2023
+            "%d %B %Y",  # 8 May 2023
+            "%d %b %Y",  # 8 May 2023 (short month)
+            "%B %d, %Y",  # May 8, 2023
+            "%Y-%m-%d",  # 2023-05-08
+            "%m/%d/%Y",  # 05/08/2023
+            "%d/%m/%Y",  # 08/05/2023
         ]
 
         for fmt in formats:
@@ -137,8 +160,9 @@ class TemporalResolver:
 
         # Try dateutil parser as fallback
         try:
-            return date_parser.parse(timestamp_str, dayfirst=True)
-        except:
+            result: datetime = date_parser.parse(timestamp_str, dayfirst=True)
+            return result
+        except Exception:
             pass
 
         return None
@@ -147,8 +171,8 @@ class TemporalResolver:
         self,
         text: str,
         reference_date: datetime,
-        context: Optional[str] = None,
-    ) -> List[ResolvedDate]:
+        context: str | None = None,
+    ) -> list[ResolvedDate]:
         """
         Resolve all temporal expressions in text.
 
@@ -167,29 +191,37 @@ class TemporalResolver:
         for pattern, offset, unit in self.RELATIVE_PATTERNS:
             if re.search(pattern, text_lower):
                 resolved_date = self._apply_offset(reference_date, offset, unit)
-                resolved.append(ResolvedDate(
-                    original_text=pattern.replace(r"\b", ""),
-                    resolved_date=resolved_date,
-                    confidence=0.95,
-                    resolution_method="relative",
-                    context=context,
-                ))
+                resolved.append(
+                    ResolvedDate(
+                        original_text=pattern.replace(r"\b", ""),
+                        resolved_date=resolved_date,
+                        confidence=0.95,
+                        resolution_method="relative",
+                        context=context,
+                    )
+                )
 
         # 2. Check for "N units ago" patterns
         for pattern, unit in self.N_UNITS_AGO:
             for match in re.finditer(pattern, text_lower):
                 n = int(match.group(1))
                 resolved_date = self._apply_offset(reference_date, -n, unit)
-                resolved.append(ResolvedDate(
-                    original_text=match.group(0),
-                    resolved_date=resolved_date,
-                    confidence=0.95,
-                    resolution_method="relative",
-                    context=context,
-                ))
+                resolved.append(
+                    ResolvedDate(
+                        original_text=match.group(0),
+                        resolved_date=resolved_date,
+                        confidence=0.95,
+                        resolution_method="relative",
+                        context=context,
+                    )
+                )
 
         # 3. Check for "the [day] before [date]" pattern
-        day_before_pattern = r"the\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+before\s+(\d{1,2}\s+\w+\s+\d{4})"
+        day_before_pattern = (
+            r"the\s+(monday|tuesday|wednesday|thursday"
+            r"|friday|saturday|sunday)\s+before\s+"
+            r"(\d{1,2}\s+\w+\s+\d{4})"
+        )
         for match in re.finditer(day_before_pattern, text_lower):
             target_day = match.group(1)
             date_str = match.group(2)
@@ -197,13 +229,15 @@ class TemporalResolver:
             ref_date = self.parse_session_timestamp(date_str)
             if ref_date:
                 resolved_date = self._find_previous_day(ref_date, target_day)
-                resolved.append(ResolvedDate(
-                    original_text=match.group(0),
-                    resolved_date=resolved_date,
-                    confidence=0.9,
-                    resolution_method="computed",
-                    context=context,
-                ))
+                resolved.append(
+                    ResolvedDate(
+                        original_text=match.group(0),
+                        resolved_date=resolved_date,
+                        confidence=0.9,
+                        resolution_method="computed",
+                        context=context,
+                    )
+                )
 
         # 4. Check for "the week before [date]" pattern
         week_before_pattern = r"the\s+week\s+before\s+(\d{1,2}\s+\w+\s+\d{4})"
@@ -212,13 +246,15 @@ class TemporalResolver:
             ref_date = self.parse_session_timestamp(date_str)
             if ref_date:
                 resolved_date = ref_date - timedelta(weeks=1)
-                resolved.append(ResolvedDate(
-                    original_text=match.group(0),
-                    resolved_date=resolved_date,
-                    confidence=0.9,
-                    resolution_method="computed",
-                    context=context,
-                ))
+                resolved.append(
+                    ResolvedDate(
+                        original_text=match.group(0),
+                        resolved_date=resolved_date,
+                        confidence=0.9,
+                        resolution_method="computed",
+                        context=context,
+                    )
+                )
 
         # 5. Check for absolute dates in text
         absolute_patterns = [
@@ -231,14 +267,16 @@ class TemporalResolver:
                 try:
                     parsed = self.parse_session_timestamp(match.group(0))
                     if parsed:
-                        resolved.append(ResolvedDate(
-                            original_text=match.group(0),
-                            resolved_date=parsed,
-                            confidence=1.0,
-                            resolution_method="absolute",
-                            context=context,
-                        ))
-                except:
+                        resolved.append(
+                            ResolvedDate(
+                                original_text=match.group(0),
+                                resolved_date=parsed,
+                                confidence=1.0,
+                                resolution_method="absolute",
+                                context=context,
+                            )
+                        )
+                except Exception:
                     pass
 
         # 6. Check for years (e.g., "in 2022")
@@ -246,15 +284,20 @@ class TemporalResolver:
         for match in re.finditer(year_pattern, text_lower):
             year = int(match.group(0))
             # Only add if it's a standalone year reference
-            if match.start() > 0 and text_lower[match.start()-1:match.start()+1].strip().isdigit():
+            if (
+                match.start() > 0
+                and text_lower[match.start() - 1 : match.start() + 1].strip().isdigit()
+            ):
                 continue
-            resolved.append(ResolvedDate(
-                original_text=match.group(0),
-                resolved_date=datetime(year, 6, 15),  # Mid-year approximation
-                confidence=0.7,
-                resolution_method="year_only",
-                context=context,
-            ))
+            resolved.append(
+                ResolvedDate(
+                    original_text=match.group(0),
+                    resolved_date=datetime(year, 6, 15),  # Mid-year approximation
+                    confidence=0.7,
+                    resolution_method="year_only",
+                    context=context,
+                )
+            )
 
         return resolved
 
@@ -265,9 +308,11 @@ class TemporalResolver:
         elif unit == "week":
             return base + timedelta(weeks=offset)
         elif unit == "month":
-            return base + relativedelta(months=offset)
+            result: datetime = base + relativedelta(months=offset)
+            return result
         elif unit == "year":
-            return base + relativedelta(years=offset)
+            result2: datetime = base + relativedelta(years=offset)
+            return result2
         else:
             return base
 
@@ -285,8 +330,8 @@ class TemporalResolver:
 
     def build_temporal_context(
         self,
-        messages: List[Dict[str, Any]],
-        session_timestamp: Optional[str] = None,
+        messages: list[dict[str, Any]],
+        session_timestamp: str | None = None,
     ) -> TemporalContext:
         """
         Build temporal context for a conversation session.
@@ -337,7 +382,7 @@ class TemporalResolver:
         question: str,
         temporal_context: TemporalContext,
         retrieved_content: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Try to answer a temporal question using resolved dates.
 

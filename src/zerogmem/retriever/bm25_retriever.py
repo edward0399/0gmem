@@ -9,41 +9,139 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
-import numpy as np
+from typing import Any
 
 
 @dataclass
 class BM25Config:
     """Configuration for BM25 retrieval."""
+
     k1: float = 1.5  # Term frequency saturation
     b: float = 0.75  # Length normalization
     min_token_length: int = 2
-    stopwords: set = field(default_factory=lambda: {
-        'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-        'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare',
-        'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by',
-        'from', 'as', 'into', 'through', 'during', 'before', 'after',
-        'above', 'below', 'between', 'under', 'again', 'further', 'then',
-        'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each',
-        'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not',
-        'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'just',
-        'don', 'now', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what',
-        'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'and',
-        'but', 'if', 'or', 'because', 'until', 'while', 'about', 'against',
-    })
+    stopwords: set = field(
+        default_factory=lambda: {
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "shall",
+            "can",
+            "need",
+            "dare",
+            "ought",
+            "used",
+            "to",
+            "of",
+            "in",
+            "for",
+            "on",
+            "with",
+            "at",
+            "by",
+            "from",
+            "as",
+            "into",
+            "through",
+            "during",
+            "before",
+            "after",
+            "above",
+            "below",
+            "between",
+            "under",
+            "again",
+            "further",
+            "then",
+            "once",
+            "here",
+            "there",
+            "when",
+            "where",
+            "why",
+            "how",
+            "all",
+            "each",
+            "few",
+            "more",
+            "most",
+            "other",
+            "some",
+            "such",
+            "no",
+            "nor",
+            "not",
+            "only",
+            "own",
+            "same",
+            "so",
+            "than",
+            "too",
+            "very",
+            "s",
+            "t",
+            "just",
+            "don",
+            "now",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "this",
+            "that",
+            "these",
+            "those",
+            "am",
+            "and",
+            "but",
+            "if",
+            "or",
+            "because",
+            "until",
+            "while",
+            "about",
+            "against",
+        }
+    )
 
 
 @dataclass
 class BM25Document:
     """A document indexed for BM25."""
+
     id: str
     content: str
-    tokens: List[str]
+    tokens: list[str]
     token_counts: Counter
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BM25Retriever:
@@ -60,99 +158,168 @@ class BM25Retriever:
     # Query expansion mappings for common question types
     QUERY_EXPANSIONS = {
         # Relationship and status
-        "relationship": ["single", "married", "dating", "breakup", "divorce", "partner", "boyfriend", "girlfriend", "spouse", "parent", "engaged", "widowed"],
+        "relationship": [
+            "single",
+            "married",
+            "dating",
+            "breakup",
+            "divorce",
+            "partner",
+            "boyfriend",
+            "girlfriend",
+            "spouse",
+            "parent",
+            "engaged",
+            "widowed",
+        ],
         "status": ["single", "married", "engaged", "divorced", "dating", "relationship"],
         "single": ["unmarried", "alone", "breakup", "divorced"],
         "married": ["spouse", "husband", "wife", "wedding"],
-
         # Identity
-        "identity": ["transgender", "trans", "gender", "lgbtq", "queer", "gay", "lesbian", "bisexual", "coming out", "journey"],
+        "identity": [
+            "transgender",
+            "trans",
+            "gender",
+            "lgbtq",
+            "queer",
+            "gay",
+            "lesbian",
+            "bisexual",
+            "coming out",
+            "journey",
+        ],
         "transgender": ["trans", "transition", "gender", "coming out"],
-
         # Activities and hobbies
-        "activities": ["hobby", "hobbies", "like", "enjoy", "do", "play", "sport", "signed up", "class"],
+        "activities": [
+            "hobby",
+            "hobbies",
+            "like",
+            "enjoy",
+            "do",
+            "play",
+            "sport",
+            "signed up",
+            "class",
+        ],
         "hobbies": ["activities", "interests", "enjoy", "like", "do", "play"],
         "partake": ["do", "enjoy", "participate", "engage", "signed up"],
-
         # Outdoor activities
-        "camped": ["camping", "camp", "tent", "forest", "beach", "mountains", "outdoors", "hiking", "nature"],
+        "camped": [
+            "camping",
+            "camp",
+            "tent",
+            "forest",
+            "beach",
+            "mountains",
+            "outdoors",
+            "hiking",
+            "nature",
+        ],
         "camping": ["camp", "camped", "tent", "outdoors", "forest", "beach", "mountains"],
         "hiked": ["hiking", "hike", "trail", "mountains", "nature", "walk"],
-
         # Family
-        "kids": ["children", "son", "daughter", "child", "family", "three", "two", "dinosaurs", "nature"],
+        "kids": [
+            "children",
+            "son",
+            "daughter",
+            "child",
+            "family",
+            "three",
+            "two",
+            "dinosaurs",
+            "nature",
+        ],
         "children": ["kids", "child", "son", "daughter", "family", "three", "two"],
         "family": ["kids", "children", "spouse", "husband", "wife", "parents", "daughter", "son"],
         "how many": ["three", "two", "one", "four", "five", "number"],
-
         # Pets
-        "pets": ["pet", "dog", "cat", "cats", "guinea pig", "hamster", "fish", "oliver", "luna", "bailey"],
+        "pets": [
+            "pet",
+            "dog",
+            "cat",
+            "cats",
+            "guinea pig",
+            "hamster",
+            "fish",
+            "oliver",
+            "luna",
+            "bailey",
+        ],
         "pet": ["pets", "dog", "cat", "cats", "guinea pig", "hamster"],
         "names": ["named", "name", "called", "oliver", "luna", "bailey"],
-
         # Preferences
         "like": ["enjoy", "love", "favorite", "favourite", "prefer", "fond"],
         "enjoy": ["like", "love", "favorite", "prefer"],
         "favorite": ["favourite", "best", "prefer", "love", "like"],
         "destress": ["relax", "unwind", "calm", "stress", "running", "exercise"],
-
         # Research and learning
         "research": ["researching", "researched", "looking", "studied", "investigate", "explore"],
         "researched": ["research", "looked into", "studied", "investigated"],
-
         # Reading and books
         "books": ["book", "read", "reading", "novel", "literature", "author"],
         "read": ["reading", "book", "books", "novel"],
-
         # Art and creativity
         "paint": ["painting", "painted", "art", "draw", "drawing", "canvas", "artistic"],
         "painted": ["paint", "painting", "art", "artwork", "canvas"],
         "painting": ["paint", "painted", "art", "canvas", "draw"],
-
         # Career and education
         "career": ["job", "work", "profession", "pursue", "counseling", "mental health"],
         "pursue": ["career", "study", "become", "work", "job"],
         "education": ["study", "school", "degree", "university", "college", "certification"],
-
         # Events and participation
         "events": ["event", "participated", "attended", "went", "joined"],
         "participated": ["joined", "attended", "went", "event", "group"],
-
         # Location
         "moved": ["move", "from", "country", "relocated", "came from"],
         "from": ["moved", "country", "hometown", "origin", "came"],
         "country": ["from", "moved", "homeland", "origin", "sweden", "hometown"],
-
         # LGBTQ specific
-        "lgbtq": ["lgbt", "pride", "transgender", "trans", "queer", "gay", "lesbian", "community", "support group"],
+        "lgbtq": [
+            "lgbt",
+            "pride",
+            "transgender",
+            "trans",
+            "queer",
+            "gay",
+            "lesbian",
+            "community",
+            "support group",
+        ],
         "pride": ["parade", "lgbtq", "lgbt", "community", "march"],
         "support": ["group", "community", "help", "meeting"],
-
         # Time-related
         "recently": ["recent", "lately", "last", "just", "new"],
         "sunset": ["sunrise", "sky", "landscape", "scene", "painted"],
-
         # Music and instruments
-        "instruments": ["instrument", "play", "plays", "violin", "piano", "guitar", "clarinet", "flute", "drums"],
+        "instruments": [
+            "instrument",
+            "play",
+            "plays",
+            "violin",
+            "piano",
+            "guitar",
+            "clarinet",
+            "flute",
+            "drums",
+        ],
         "instrument": ["instruments", "play", "plays", "violin", "piano", "guitar", "clarinet"],
         "musicians": ["musician", "artist", "band", "bach", "mozart", "ed sheeran", "classical"],
         "classical": ["bach", "mozart", "beethoven", "vivaldi", "symphony"],
         "artists": ["artist", "band", "musician", "concert", "performed"],
         "bands": ["band", "artist", "concert", "performed", "seen"],
-
         # Art specific
         "art": ["painting", "painted", "draw", "drawing", "abstract", "canvas", "sculpture"],
         "abstract": ["art", "painting", "painted", "artistic"],
     }
 
-    def __init__(self, config: Optional[BM25Config] = None):
+    def __init__(self, config: BM25Config | None = None):
         self.config = config or BM25Config()
 
         # Document storage
-        self.documents: Dict[str, BM25Document] = {}
+        self.documents: dict[str, BM25Document] = {}
 
         # Inverted index: token -> list of (doc_id, term_freq)
-        self.inverted_index: Dict[str, List[Tuple[str, int]]] = defaultdict(list)
+        self.inverted_index: dict[str, list[tuple[str, int]]] = defaultdict(list)
 
         # Document frequency: token -> number of docs containing it
         self.doc_freq: Counter = Counter()
@@ -162,26 +329,23 @@ class BM25Retriever:
         self.avg_doc_length = 0.0
         self._total_tokens = 0
 
-    def tokenize(self, text: str) -> List[str]:
+    def tokenize(self, text: str) -> list[str]:
         """Tokenize text into words."""
         # Lowercase and extract words
         text = text.lower()
-        tokens = re.findall(r'\b[a-z]+\b', text)
+        tokens = re.findall(r"\b[a-z]+\b", text)
 
         # Filter by length and stopwords
         tokens = [
-            t for t in tokens
-            if len(t) >= self.config.min_token_length
-            and t not in self.config.stopwords
+            t
+            for t in tokens
+            if len(t) >= self.config.min_token_length and t not in self.config.stopwords
         ]
 
         return tokens
 
     def add_document(
-        self,
-        doc_id: str,
-        content: str,
-        metadata: Optional[Dict[str, Any]] = None
+        self, doc_id: str, content: str, metadata: dict[str, Any] | None = None
     ) -> None:
         """Add a document to the index."""
         if doc_id in self.documents:
@@ -211,10 +375,7 @@ class BM25Retriever:
         self._total_tokens += len(tokens)
         self.avg_doc_length = self._total_tokens / self.total_docs
 
-    def add_documents(
-        self,
-        documents: List[Tuple[str, str, Optional[Dict[str, Any]]]]
-    ) -> None:
+    def add_documents(self, documents: list[tuple[str, str, dict[str, Any] | None]]) -> None:
         """Add multiple documents at once."""
         for doc_id, content, metadata in documents:
             self.add_document(doc_id, content, metadata)
@@ -229,8 +390,7 @@ class BM25Retriever:
         # Update inverted index
         for token, count in doc.token_counts.items():
             self.inverted_index[token] = [
-                (d_id, c) for d_id, c in self.inverted_index[token]
-                if d_id != doc_id
+                (d_id, c) for d_id, c in self.inverted_index[token] if d_id != doc_id
             ]
             self.doc_freq[token] -= 1
             if self.doc_freq[token] == 0:
@@ -254,7 +414,7 @@ class BM25Retriever:
         # Standard IDF formula with smoothing
         return math.log((self.total_docs - df + 0.5) / (df + 0.5) + 1)
 
-    def _score_document(self, doc: BM25Document, query_tokens: List[str]) -> float:
+    def _score_document(self, doc: BM25Document, query_tokens: list[str]) -> float:
         """Compute BM25 score for a document given query tokens."""
         score = 0.0
         doc_length = len(doc.tokens)
@@ -277,7 +437,7 @@ class BM25Retriever:
 
         return score
 
-    def _expand_query(self, tokens: List[str]) -> List[str]:
+    def _expand_query(self, tokens: list[str]) -> list[str]:
         """Expand query tokens with related terms."""
         expanded = list(tokens)
         for token in tokens:
@@ -289,12 +449,8 @@ class BM25Retriever:
         return expanded
 
     def search(
-        self,
-        query: str,
-        top_k: int = 10,
-        min_score: float = 0.0,
-        use_expansion: bool = True
-    ) -> List[Tuple[str, float, str]]:
+        self, query: str, top_k: int = 10, min_score: float = 0.0, use_expansion: bool = True
+    ) -> list[tuple[str, float, str]]:
         """
         Search for documents matching the query.
 
@@ -336,7 +492,7 @@ class BM25Retriever:
 
         return scored[:top_k]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get index statistics."""
         return {
             "total_documents": self.total_docs,
@@ -368,7 +524,7 @@ class HybridRetriever:
     def __init__(
         self,
         bm25: BM25Retriever,
-        semantic_search_fn: callable,
+        semantic_search_fn: Callable[..., Any],
         alpha: float = 0.5,  # Weight for semantic (1-alpha for BM25)
         rrf_k: int = 60,  # RRF constant
     ):
@@ -390,7 +546,7 @@ class HybridRetriever:
         self,
         query: str,
         top_k: int = 10,
-    ) -> List[Tuple[str, float, str, Dict[str, float]]]:
+    ) -> list[tuple[str, float, str, dict[str, int | None]]]:
         """
         Hybrid search combining BM25 and semantic.
 
@@ -400,7 +556,7 @@ class HybridRetriever:
         bm25_results = self.bm25.search(query, top_k=top_k * 2)
 
         # Get semantic results
-        semantic_results = self.semantic_search_fn(query)[:top_k * 2]
+        semantic_results = self.semantic_search_fn(query)[: top_k * 2]
 
         # Create rank mappings
         bm25_ranks = {doc_id: rank for rank, (doc_id, _, _) in enumerate(bm25_results)}
@@ -431,12 +587,17 @@ class HybridRetriever:
                         content = c
                         break
 
-            combined.append((
-                doc_id,
-                combined_score,
-                content,
-                {"bm25_rank": bm25_ranks.get(doc_id), "semantic_rank": semantic_ranks.get(doc_id)},
-            ))
+            combined.append(
+                (
+                    doc_id,
+                    combined_score,
+                    content,
+                    {
+                        "bm25_rank": bm25_ranks.get(doc_id),
+                        "semantic_rank": semantic_ranks.get(doc_id),
+                    },
+                )
+            )
 
         # Sort by combined score
         combined.sort(key=lambda x: x[1], reverse=True)

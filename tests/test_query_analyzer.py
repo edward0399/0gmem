@@ -1,8 +1,8 @@
 """Tests for QueryAnalyzer: query understanding and routing."""
 
 from zerogmem.retriever.query_analyzer import (
-    QueryAnalyzer,
     QueryAnalysis,
+    QueryAnalyzer,
     QueryIntent,
     ReasoningType,
 )

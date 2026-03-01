@@ -10,52 +10,54 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple, Set
+from typing import Any
+
 import numpy as np
 
-from zerogmem.graph.temporal import TemporalGraph, TemporalNode, TimeInterval, TemporalRelation
+from zerogmem.graph.causal import CausalEdge, CausalGraph, CausalNode
+from zerogmem.graph.entity import EntityEdge, EntityGraph, EntityNode
 from zerogmem.graph.semantic import SemanticGraph, SemanticNode
-from zerogmem.graph.causal import CausalGraph, CausalNode, CausalEdge
-from zerogmem.graph.entity import EntityGraph, EntityNode, EntityEdge, EntityType
+from zerogmem.graph.temporal import TemporalGraph, TemporalNode, TemporalRelation, TimeInterval
 
 
 @dataclass
 class UnifiedMemoryItem:
     """A unified memory item that can be represented in all four graphs."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str = ""
     summary: str = ""  # Compressed version
-    embedding: Optional[np.ndarray] = None
+    embedding: np.ndarray | None = None
 
     # Temporal info
-    event_time: Optional[TimeInterval] = None
+    event_time: TimeInterval | None = None
     ingestion_time: datetime = field(default_factory=datetime.now)
 
     # Entity info
-    entities: List[str] = field(default_factory=list)  # Entity IDs
-    entity_names: List[str] = field(default_factory=list)  # For display
+    entities: list[str] = field(default_factory=list)  # Entity IDs
+    entity_names: list[str] = field(default_factory=list)  # For display
 
     # Causal info
-    causes: List[str] = field(default_factory=list)  # Memory IDs that caused this
-    effects: List[str] = field(default_factory=list)  # Memory IDs caused by this
+    causes: list[str] = field(default_factory=list)  # Memory IDs that caused this
+    effects: list[str] = field(default_factory=list)  # Memory IDs caused by this
 
     # Semantic info
-    concepts: List[str] = field(default_factory=list)
+    concepts: list[str] = field(default_factory=list)
     importance: float = 0.5
 
     # Metadata
     source: str = ""  # conversation, document, etc.
-    session_id: Optional[str] = None
-    turn_number: Optional[int] = None
-    speaker: Optional[str] = None
-    negated_facts: List[str] = field(default_factory=list)  # Explicit negations
+    session_id: str | None = None
+    turn_number: int | None = None
+    speaker: str | None = None
+    negated_facts: list[str] = field(default_factory=list)  # Explicit negations
 
     # Graph node references
-    temporal_node_id: Optional[str] = None
-    semantic_node_id: Optional[str] = None
-    causal_node_id: Optional[str] = None
+    temporal_node_id: str | None = None
+    semantic_node_id: str | None = None
+    causal_node_id: str | None = None
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class UnifiedMemoryGraph:
@@ -76,11 +78,11 @@ class UnifiedMemoryGraph:
         self.entity_graph = EntityGraph()
 
         # Unified memory store
-        self.memories: Dict[str, UnifiedMemoryItem] = {}
+        self.memories: dict[str, UnifiedMemoryItem] = {}
 
         # Cross-references
-        self._entity_to_memories: Dict[str, Set[str]] = {}  # entity_id -> memory_ids
-        self._concept_to_memories: Dict[str, Set[str]] = {}  # concept -> memory_ids
+        self._entity_to_memories: dict[str, set[str]] = {}  # entity_id -> memory_ids
+        self._concept_to_memories: dict[str, set[str]] = {}  # concept -> memory_ids
 
     def add_memory(self, memory: UnifiedMemoryItem) -> str:
         """
@@ -160,7 +162,7 @@ class UnifiedMemoryGraph:
         target_id: str,
         relation: str,
         negated: bool = False,
-        evidence: List[str] = None
+        evidence: list[str] | None = None,
     ) -> str:
         """Add a relation between entities."""
         edge = EntityEdge(
@@ -189,18 +191,18 @@ class UnifiedMemoryGraph:
         if memory.temporal_node_id:
             self.temporal_graph.nodes.pop(memory.temporal_node_id, None)
             self.temporal_graph.edges = [
-                e for e in self.temporal_graph.edges
-                if e.source_id != memory.temporal_node_id
-                and e.target_id != memory.temporal_node_id
+                e
+                for e in self.temporal_graph.edges
+                if e.source_id != memory.temporal_node_id and e.target_id != memory.temporal_node_id
             ]
 
         # Remove from semantic graph
         if memory.semantic_node_id:
             self.semantic_graph.nodes.pop(memory.semantic_node_id, None)
             self.semantic_graph.edges = [
-                e for e in self.semantic_graph.edges
-                if e.source_id != memory.semantic_node_id
-                and e.target_id != memory.semantic_node_id
+                e
+                for e in self.semantic_graph.edges
+                if e.source_id != memory.semantic_node_id and e.target_id != memory.semantic_node_id
             ]
             # Remove from embedding index
             if memory.semantic_node_id in self.semantic_graph._embedding_ids:
@@ -212,9 +214,9 @@ class UnifiedMemoryGraph:
         if memory.causal_node_id:
             self.causal_graph.nodes.pop(memory.causal_node_id, None)
             self.causal_graph.edges = {
-                k: e for k, e in self.causal_graph.edges.items()
-                if e.cause_id != memory.causal_node_id
-                and e.effect_id != memory.causal_node_id
+                k: e
+                for k, e in self.causal_graph.edges.items()
+                if e.cause_id != memory.causal_node_id and e.effect_id != memory.causal_node_id
             }
 
         # Clean up cross-references
@@ -229,22 +231,19 @@ class UnifiedMemoryGraph:
 
         return True
 
-    def get_memory(self, memory_id: str) -> Optional[UnifiedMemoryItem]:
+    def get_memory(self, memory_id: str) -> UnifiedMemoryItem | None:
         """Get a memory by ID."""
         return self.memories.get(memory_id)
 
-    def get_entity(self, entity_id: str) -> Optional[EntityNode]:
+    def get_entity(self, entity_id: str) -> EntityNode | None:
         """Get an entity by ID."""
         return self.entity_graph.get_node(entity_id)
 
     # ==================== Query Methods ====================
 
     def query_by_time(
-        self,
-        start: datetime,
-        end: Optional[datetime] = None,
-        entities: Optional[List[str]] = None
-    ) -> List[UnifiedMemoryItem]:
+        self, start: datetime, end: datetime | None = None, entities: list[str] | None = None
+    ) -> list[UnifiedMemoryItem]:
         """Query memories by time range."""
         if end is None:
             # Point query
@@ -266,11 +265,8 @@ class UnifiedMemoryGraph:
         return memories
 
     def query_by_similarity(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 10,
-        threshold: float = 0.0
-    ) -> List[Tuple[UnifiedMemoryItem, float]]:
+        self, query_embedding: np.ndarray, top_k: int = 10, threshold: float = 0.0
+    ) -> list[tuple[UnifiedMemoryItem, float]]:
         """Query memories by semantic similarity."""
         similar_nodes = self.semantic_graph.find_similar(
             query_embedding, top_k=top_k, threshold=threshold
@@ -284,25 +280,20 @@ class UnifiedMemoryGraph:
         return results
 
     def query_by_entity(
-        self,
-        entity_id: str,
-        relation_filter: Optional[List[str]] = None
-    ) -> List[UnifiedMemoryItem]:
+        self, entity_id: str, relation_filter: list[str] | None = None
+    ) -> list[UnifiedMemoryItem]:
         """Query memories involving an entity."""
         memory_ids = self._entity_to_memories.get(entity_id, set())
         return [self.memories[mid] for mid in memory_ids if mid in self.memories]
 
-    def query_by_concept(self, concept: str) -> List[UnifiedMemoryItem]:
+    def query_by_concept(self, concept: str) -> list[UnifiedMemoryItem]:
         """Query memories related to a concept."""
         memory_ids = self._concept_to_memories.get(concept, set())
         return [self.memories[mid] for mid in memory_ids if mid in self.memories]
 
     def query_temporal_relative(
-        self,
-        reference_memory_id: str,
-        relation: TemporalRelation,
-        limit: int = 10
-    ) -> List[UnifiedMemoryItem]:
+        self, reference_memory_id: str, relation: TemporalRelation, limit: int = 10
+    ) -> list[UnifiedMemoryItem]:
         """Query memories with temporal relation to reference."""
         ref_memory = self.memories.get(reference_memory_id)
         if not ref_memory or not ref_memory.temporal_node_id:
@@ -328,11 +319,8 @@ class UnifiedMemoryGraph:
         ]
 
     def query_causal_chain(
-        self,
-        memory_id: str,
-        direction: str = "causes",  # "causes" or "effects"
-        max_depth: int = 3
-    ) -> List[List[UnifiedMemoryItem]]:
+        self, memory_id: str, direction: str = "causes", max_depth: int = 3  # "causes" or "effects"
+    ) -> list[list[UnifiedMemoryItem]]:
         """Query causal chains related to a memory."""
         memory = self.memories.get(memory_id)
         if not memory or not memory.causal_node_id:
@@ -359,11 +347,11 @@ class UnifiedMemoryGraph:
 
     def multi_hop_query(
         self,
-        start_entities: List[str],
-        query_embedding: Optional[np.ndarray] = None,
+        start_entities: list[str],
+        query_embedding: np.ndarray | None = None,
         max_hops: int = 3,
-        top_k: int = 10
-    ) -> List[Tuple[UnifiedMemoryItem, float, List[str]]]:
+        top_k: int = 10,
+    ) -> list[tuple[UnifiedMemoryItem, float, list[str]]]:
         """
         Perform multi-hop reasoning across graphs.
 
@@ -393,7 +381,7 @@ class UnifiedMemoryGraph:
                 # Score based on similarity if embedding provided
                 if query_embedding is not None and memory.embedding is not None:
                     sim = self.semantic_graph.compute_similarity(query_embedding, memory.embedding)
-                    score *= (0.5 + 0.5 * sim)  # Blend path score with similarity
+                    score *= 0.5 + 0.5 * sim  # Blend path score with similarity
 
                 results.append((memory, score, path))
 
@@ -416,11 +404,11 @@ class UnifiedMemoryGraph:
                     if temp_node:
                         neighbors = self.temporal_graph.get_neighbors(
                             temp_node.id,
-                            relation_filter=[TemporalRelation.BEFORE, TemporalRelation.AFTER]
+                            relation_filter=[TemporalRelation.BEFORE, TemporalRelation.AFTER],
                         )
-                        for neighbor, relation in neighbors[:3]:
+                        for neighbor, temp_rel in neighbors[:3]:
                             if neighbor.memory_id and neighbor.memory_id not in visited_memories:
-                                new_path = path + [f"temporal:{relation.value}"]
+                                new_path = path + [f"temporal:{temp_rel.value}"]
                                 next_frontier.append((neighbor.memory_id, score * 0.7, new_path))
                                 visited_memories.add(neighbor.memory_id)
 
@@ -429,9 +417,9 @@ class UnifiedMemoryGraph:
                     sem_node = self.semantic_graph.get_node(memory.semantic_node_id)
                     if sem_node:
                         related = self.semantic_graph.find_related(sem_node.id, max_depth=1)
-                        for rel_node, relation, _ in related[:3]:
+                        for rel_node, sem_rel, _ in related[:3]:
                             if rel_node.memory_id and rel_node.memory_id not in visited_memories:
-                                new_path = path + [f"semantic:{relation}"]
+                                new_path = path + [f"semantic:{sem_rel}"]
                                 next_frontier.append((rel_node.memory_id, score * 0.7, new_path))
                                 visited_memories.add(rel_node.memory_id)
 
@@ -444,9 +432,9 @@ class UnifiedMemoryGraph:
     def find_temporal_chain(
         self,
         entity_id: str,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None
-    ) -> List[UnifiedMemoryItem]:
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
+    ) -> list[UnifiedMemoryItem]:
         """
         Get chronological chain of events for an entity.
         Critical for temporal reasoning in LoCoMo.
@@ -465,11 +453,7 @@ class UnifiedMemoryGraph:
 
         return memories
 
-    def find_events_between(
-        self,
-        event_a_id: str,
-        event_b_id: str
-    ) -> List[UnifiedMemoryItem]:
+    def find_events_between(self, event_a_id: str, event_b_id: str) -> list[UnifiedMemoryItem]:
         """
         Find events that occurred between two events.
         Critical for temporal chain reasoning.
@@ -499,29 +483,19 @@ class UnifiedMemoryGraph:
     # ==================== Negative Fact Handling ====================
 
     def add_negative_fact(
-        self,
-        subject_entity_id: str,
-        relation: str,
-        object_entity_id: str,
-        evidence_memory_id: str
+        self, subject_entity_id: str, relation: str, object_entity_id: str, evidence_memory_id: str
     ) -> None:
         """
         Store an explicit negative fact.
         Critical for adversarial robustness.
         """
         self.entity_graph.add_negative_relation(
-            subject_entity_id,
-            object_entity_id,
-            relation,
-            evidence=[evidence_memory_id]
+            subject_entity_id, object_entity_id, relation, evidence=[evidence_memory_id]
         )
 
     def check_negation(
-        self,
-        subject_entity_id: str,
-        relation: str,
-        object_entity_id: str
-    ) -> Tuple[bool, Optional[str]]:
+        self, subject_entity_id: str, relation: str, object_entity_id: str
+    ) -> tuple[bool, str | None]:
         """
         Check if a fact is explicitly negated.
 
@@ -543,7 +517,7 @@ class UnifiedMemoryGraph:
 
     # ==================== Statistics ====================
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about the unified graph."""
         return {
             "total_memories": len(self.memories),
@@ -555,7 +529,7 @@ class UnifiedMemoryGraph:
             "unique_concepts": len(self._concept_to_memories),
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize the unified graph.
 
         Note: Embeddings are NOT included. They must be saved separately
@@ -569,9 +543,7 @@ class UnifiedMemoryGraph:
                     "summary": m.summary,
                     "event_time_start": m.event_time.start.isoformat() if m.event_time else None,
                     "event_time_end": (
-                        m.event_time.end.isoformat()
-                        if m.event_time and m.event_time.end
-                        else None
+                        m.event_time.end.isoformat() if m.event_time and m.event_time.end else None
                     ),
                     "ingestion_time": m.ingestion_time.isoformat(),
                     "entities": m.entities,
@@ -601,9 +573,9 @@ class UnifiedMemoryGraph:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
-    ) -> "UnifiedMemoryGraph":
+        data: dict[str, Any],
+        embeddings_map: dict[str, np.ndarray] | None = None,
+    ) -> UnifiedMemoryGraph:
         """Deserialize the unified graph from dictionary.
 
         Args:
@@ -630,9 +602,7 @@ class UnifiedMemoryGraph:
                     sem_embeddings[key] = emb
                 else:
                     sem_embeddings[f"semantic_{key}"] = emb
-            graph.semantic_graph = SemanticGraph.from_dict(
-                data["semantic_graph"], sem_embeddings
-            )
+            graph.semantic_graph = SemanticGraph.from_dict(data["semantic_graph"], sem_embeddings)
 
         # Restore memories directly (NOT via add_memory which creates sub-nodes)
         for md in data.get("memories", []):

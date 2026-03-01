@@ -7,19 +7,20 @@ Inspired by EverMemOS's session-level compression for better context density.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class SessionSummary:
     """Summary of a conversation session."""
+
     session_id: str
     session_date: str
-    participants: List[str]
-    key_events: List[str]
-    key_facts: Dict[str, List[str]]  # person -> facts
-    topics: List[str]
+    participants: list[str]
+    key_events: list[str]
+    key_facts: dict[str, list[str]]  # person -> facts
+    topics: list[str]
     raw_message_count: int
 
 
@@ -55,14 +56,14 @@ class SessionSummarizer:
         (r"(?:bought|purchased|got)\s+(?:a\s+)?(.+?)(?:\.|,|!|$)", "bought"),
     ]
 
-    def __init__(self, llm_client: Optional[Any] = None):
+    def __init__(self, llm_client: Any | None = None):
         self._client = llm_client
-        self.session_summaries: Dict[str, SessionSummary] = {}
+        self.session_summaries: dict[str, SessionSummary] = {}
 
     def summarize_session(
         self,
         session_id: str,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         session_date: str = "",
     ) -> SessionSummary:
         """
@@ -78,7 +79,7 @@ class SessionSummarizer:
         """
         participants = set()
         key_events = []
-        key_facts = {}
+        key_facts: dict[str, list[str]] = {}
         topics_found = set()
 
         for msg in messages:
@@ -125,7 +126,7 @@ class SessionSummarizer:
         self.session_summaries[session_id] = summary
         return summary
 
-    def _extract_session_facts(self, text: str, speaker: str) -> List[str]:
+    def _extract_session_facts(self, text: str, speaker: str) -> list[str]:
         """Extract key facts from a message."""
         facts = []
         text_lower = text.lower()
@@ -185,9 +186,9 @@ class SessionSummarizer:
     def get_relevant_sessions(
         self,
         question: str,
-        target_entity: Optional[str] = None,
+        target_entity: str | None = None,
         max_sessions: int = 5,
-    ) -> List[SessionSummary]:
+    ) -> list[SessionSummary]:
         """
         Find sessions most relevant to a question.
 

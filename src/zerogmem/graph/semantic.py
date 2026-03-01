@@ -9,29 +9,31 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple
-import numpy as np
+from typing import Any
+
 import networkx as nx
+import numpy as np
 
 
 @dataclass
 class SemanticNode:
     """A node in the semantic graph representing a memory or concept."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str = ""
-    embedding: Optional[np.ndarray] = None
-    concepts: List[str] = field(default_factory=list)  # Associated concepts/topics
+    embedding: np.ndarray | None = None
+    concepts: list[str] = field(default_factory=list)  # Associated concepts/topics
     importance: float = 0.5  # Attention-weighted importance
-    memory_id: Optional[str] = None  # Reference to source memory
+    memory_id: str | None = None  # Reference to source memory
     created_at: datetime = field(default_factory=datetime.now)
     access_count: int = 0
-    last_accessed: Optional[datetime] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    last_accessed: datetime | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, SemanticNode):
             return self.id == other.id
         return False
@@ -40,12 +42,13 @@ class SemanticNode:
 @dataclass
 class SemanticEdge:
     """An edge representing semantic relationship between nodes."""
+
     source_id: str = ""
     target_id: str = ""
     relation: str = ""  # is_a, part_of, related_to, similar_to, etc.
     weight: float = 1.0  # Strength of relation
-    similarity: Optional[float] = None  # Cosine similarity if computed
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    similarity: float | None = None  # Cosine similarity if computed
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SemanticGraph:
@@ -61,28 +64,28 @@ class SemanticGraph:
 
     # Semantic relation types
     RELATION_TYPES = [
-        "is_a",           # Hierarchical: "dog is_a animal"
-        "part_of",        # Compositional: "wheel part_of car"
-        "related_to",     # General association
-        "similar_to",     # Semantic similarity
-        "opposite_of",    # Antonymy
-        "causes",         # Causal (light version)
-        "follows",        # Sequential
-        "example_of",     # Instance relation
+        "is_a",  # Hierarchical: "dog is_a animal"
+        "part_of",  # Compositional: "wheel part_of car"
+        "related_to",  # General association
+        "similar_to",  # Semantic similarity
+        "opposite_of",  # Antonymy
+        "causes",  # Causal (light version)
+        "follows",  # Sequential
+        "example_of",  # Instance relation
     ]
 
     def __init__(self, embedding_dim: int = 1536):
         self.graph = nx.Graph()  # Undirected for semantic similarity
-        self.nodes: Dict[str, SemanticNode] = {}
-        self.edges: List[SemanticEdge] = []
+        self.nodes: dict[str, SemanticNode] = {}
+        self.edges: list[SemanticEdge] = []
         self.embedding_dim = embedding_dim
 
         # Embedding index for fast similarity search
-        self._embeddings: List[np.ndarray] = []
-        self._embedding_ids: List[str] = []
+        self._embeddings: list[np.ndarray] = []
+        self._embedding_ids: list[str] = []
 
         # Concept index
-        self._concept_index: Dict[str, set] = {}
+        self._concept_index: dict[str, set] = {}
 
     def add_node(self, node: SemanticNode) -> str:
         """Add a semantic node to the graph."""
@@ -106,11 +109,7 @@ class SemanticGraph:
         """Add a semantic edge to the graph."""
         self.edges.append(edge)
         self.graph.add_edge(
-            edge.source_id,
-            edge.target_id,
-            relation=edge.relation,
-            weight=edge.weight,
-            data=edge
+            edge.source_id, edge.target_id, relation=edge.relation, weight=edge.weight, data=edge
         )
 
     def compute_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
@@ -122,11 +121,8 @@ class SemanticGraph:
         return float(np.dot(embedding1, embedding2) / (norm1 * norm2))
 
     def find_similar(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 10,
-        threshold: float = 0.0
-    ) -> List[Tuple[SemanticNode, float]]:
+        self, query_embedding: np.ndarray, top_k: int = 10, threshold: float = 0.0
+    ) -> list[tuple[SemanticNode, float]]:
         """
         Find nodes most similar to query embedding.
 
@@ -149,18 +145,15 @@ class SemanticGraph:
         similarities.sort(key=lambda x: x[1], reverse=True)
         return similarities[:top_k]
 
-    def find_by_concept(self, concept: str) -> List[SemanticNode]:
+    def find_by_concept(self, concept: str) -> list[SemanticNode]:
         """Find all nodes associated with a concept."""
         if concept not in self._concept_index:
             return []
         return [self.nodes[nid] for nid in self._concept_index[concept] if nid in self.nodes]
 
     def find_related(
-        self,
-        node_id: str,
-        relation_filter: Optional[List[str]] = None,
-        max_depth: int = 2
-    ) -> List[Tuple[SemanticNode, str, int]]:
+        self, node_id: str, relation_filter: list[str] | None = None, max_depth: int = 2
+    ) -> list[tuple[SemanticNode, str, int]]:
         """
         Find nodes related to given node through graph traversal.
 
@@ -183,7 +176,7 @@ class SemanticGraph:
                     continue
 
                 edge_data = self.graph.get_edge_data(current_id, neighbor_id)
-                relation = edge_data.get('relation', 'related_to') if edge_data else 'related_to'
+                relation = edge_data.get("relation", "related_to") if edge_data else "related_to"
 
                 if relation_filter and relation not in relation_filter:
                     continue
@@ -220,24 +213,20 @@ class SemanticGraph:
                             target_id=node2_id,
                             relation="similar_to",
                             weight=sim,
-                            similarity=sim
+                            similarity=sim,
                         )
                         self.add_edge(edge)
                         edges_created += 1
 
         return edges_created
 
-    def get_cluster(self, node_id: str, similarity_threshold: float = 0.7) -> List[SemanticNode]:
+    def get_cluster(self, node_id: str, similarity_threshold: float = 0.7) -> list[SemanticNode]:
         """Get a cluster of semantically similar nodes."""
         node = self.nodes.get(node_id)
         if not node or node.embedding is None:
             return [node] if node else []
 
-        similar = self.find_similar(
-            node.embedding,
-            top_k=20,
-            threshold=similarity_threshold
-        )
+        similar = self.find_similar(node.embedding, top_k=20, threshold=similarity_threshold)
 
         return [n for n, _ in similar]
 
@@ -249,7 +238,7 @@ class SemanticGraph:
             node.access_count += 1
             node.last_accessed = datetime.now()
 
-    def get_node(self, node_id: str) -> Optional[SemanticNode]:
+    def get_node(self, node_id: str) -> SemanticNode | None:
         """Get a node by ID."""
         return self.nodes.get(node_id)
 
@@ -259,7 +248,7 @@ class SemanticGraph:
             return np.array([])
         return np.vstack(self._embeddings)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph to dictionary.
 
         Note: Embeddings are NOT included in JSON output. They must be
@@ -291,10 +280,10 @@ class SemanticGraph:
                     "metadata": e.metadata,
                 }
                 for e in self.edges
-            ]
+            ],
         }
 
-    def get_embeddings_map(self) -> Dict[str, np.ndarray]:
+    def get_embeddings_map(self) -> dict[str, np.ndarray]:
         """Get a map of node_id -> embedding for persistence."""
         result = {}
         for node_id, node in self.nodes.items():
@@ -305,9 +294,9 @@ class SemanticGraph:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
-    ) -> "SemanticGraph":
+        data: dict[str, Any],
+        embeddings_map: dict[str, np.ndarray] | None = None,
+    ) -> SemanticGraph:
         """Deserialize graph from dictionary.
 
         Args:
@@ -328,9 +317,7 @@ class SemanticGraph:
                 created_at=datetime.fromisoformat(nd["created_at"]),
                 access_count=nd.get("access_count", 0),
                 last_accessed=(
-                    datetime.fromisoformat(nd["last_accessed"])
-                    if nd.get("last_accessed")
-                    else None
+                    datetime.fromisoformat(nd["last_accessed"]) if nd.get("last_accessed") else None
                 ),
                 metadata=nd.get("metadata", {}),
             )

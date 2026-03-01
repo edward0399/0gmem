@@ -7,10 +7,10 @@ import pytest
 
 from zerogmem.mcp_server import OperationMetrics
 
-
 # ---------------------------------------------------------------------------
 # OperationMetrics unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestOperationMetrics:
 
@@ -104,6 +104,7 @@ class TestOperationMetrics:
 # MCP summary integration test
 # ---------------------------------------------------------------------------
 
+
 class TestMCPSummaryMetrics:
 
     @pytest.mark.asyncio
@@ -112,11 +113,13 @@ class TestMCPSummaryMetrics:
 
         mm = MagicMock()
         mm.get_stats.return_value = {
-            "episodic_memory": {"total_episodes": 5, "total_messages": 20,
-                                "unique_participants": 2},
+            "episodic_memory": {
+                "total_episodes": 5,
+                "total_messages": 20,
+                "unique_participants": 2,
+            },
             "semantic_memory": {"total_facts": 10},
-            "graph": {"entity_nodes": 3, "semantic_nodes": 5,
-                       "temporal_nodes": 5},
+            "graph": {"entity_nodes": 3, "semantic_nodes": 5, "temporal_nodes": 5},
             "current_session": None,
             "capacity": {
                 "max_episodes": 500,
@@ -159,11 +162,9 @@ class TestMCPSummaryMetrics:
 
         mm = MagicMock()
         mm.get_stats.return_value = {
-            "episodic_memory": {"total_episodes": 0, "total_messages": 0,
-                                "unique_participants": 0},
+            "episodic_memory": {"total_episodes": 0, "total_messages": 0, "unique_participants": 0},
             "semantic_memory": {"total_facts": 0},
-            "graph": {"entity_nodes": 0, "semantic_nodes": 0,
-                       "temporal_nodes": 0},
+            "graph": {"entity_nodes": 0, "semantic_nodes": 0, "temporal_nodes": 0},
             "current_session": None,
             "capacity": {
                 "max_episodes": 500,

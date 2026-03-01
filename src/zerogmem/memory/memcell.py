@@ -14,34 +14,35 @@ This enables:
 
 from __future__ import annotations
 
-import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Set, Any, Tuple
 from enum import Enum
+from typing import Any
 
 
 class CellType(Enum):
     """Types of atomic memory cells."""
-    EPISODE = "episode"         # Specific event or activity (e.g., "went camping")
-    FACT = "fact"               # Static fact (e.g., "has two cats")
-    PREFERENCE = "preference"   # Like/dislike (e.g., "loves hiking")
-    RELATION = "relation"       # Relationship (e.g., "friend Gina")
-    PLAN = "plan"               # Future intention (e.g., "planning to adopt")
-    EMOTION = "emotion"         # Emotional state (e.g., "felt empowered")
-    ACHIEVEMENT = "achievement" # Accomplishment (e.g., "got promoted")
+
+    EPISODE = "episode"  # Specific event or activity (e.g., "went camping")
+    FACT = "fact"  # Static fact (e.g., "has two cats")
+    PREFERENCE = "preference"  # Like/dislike (e.g., "loves hiking")
+    RELATION = "relation"  # Relationship (e.g., "friend Gina")
+    PLAN = "plan"  # Future intention (e.g., "planning to adopt")
+    EMOTION = "emotion"  # Emotional state (e.g., "felt empowered")
+    ACHIEVEMENT = "achievement"  # Accomplishment (e.g., "got promoted")
 
 
 class SceneType(Enum):
     """Types of memory scenes."""
-    ACTIVITY = "activity"           # Group of related activities
-    LIFE_EVENT = "life_event"       # Major life event (adoption, marriage, etc.)
-    CONVERSATION_TOPIC = "topic"    # Discussion about a specific topic
-    RELATIONSHIP = "relationship"   # Interactions about a person
-    HOBBY = "hobby"                 # Hobby-related memories
-    WORK = "work"                   # Work/career related
-    TEMPORAL_CLUSTER = "temporal"   # Same time period
+
+    ACTIVITY = "activity"  # Group of related activities
+    LIFE_EVENT = "life_event"  # Major life event (adoption, marriage, etc.)
+    CONVERSATION_TOPIC = "topic"  # Discussion about a specific topic
+    RELATIONSHIP = "relationship"  # Interactions about a person
+    HOBBY = "hobby"  # Hobby-related memories
+    WORK = "work"  # Work/career related
+    TEMPORAL_CLUSTER = "temporal"  # Same time period
 
 
 @dataclass
@@ -52,34 +53,35 @@ class MemCell:
     This is the smallest unit of memory that can be independently
     stored, retrieved, and reasoned about.
     """
+
     id: str
-    content: str                    # The actual memory content
-    cell_type: CellType             # Type of memory
-    entity: str                     # Primary entity this is about
+    content: str  # The actual memory content
+    cell_type: CellType  # Type of memory
+    entity: str  # Primary entity this is about
 
     # Temporal information
-    session_date: str               # Date of the session where mentioned
-    timestamp: Optional[datetime] = None  # Exact timestamp if available
-    event_date: Optional[str] = None      # When the event actually happened
+    session_date: str  # Date of the session where mentioned
+    timestamp: datetime | None = None  # Exact timestamp if available
+    event_date: str | None = None  # When the event actually happened
 
     # Source information
-    session_id: str = ""            # Which session this came from
-    session_idx: int = 0            # Session index for ordering
-    speaker: str = ""               # Who said this
-    original_text: str = ""         # Original message text
+    session_id: str = ""  # Which session this came from
+    session_idx: int = 0  # Session index for ordering
+    speaker: str = ""  # Who said this
+    original_text: str = ""  # Original message text
 
     # Extraction metadata
-    confidence: float = 1.0         # Confidence in extraction
-    keywords: Set[str] = field(default_factory=set)
+    confidence: float = 1.0  # Confidence in extraction
+    keywords: set[str] = field(default_factory=set)
 
     # Relations
-    related_entities: Set[str] = field(default_factory=set)
-    related_cells: List[str] = field(default_factory=list)  # IDs of related cells
+    related_entities: set[str] = field(default_factory=set)
+    related_cells: list[str] = field(default_factory=list)  # IDs of related cells
 
     # Scene membership
-    scene_id: Optional[str] = None  # Which scene this belongs to
+    scene_id: str | None = None  # Which scene this belongs to
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.id:
             self.id = str(uuid.uuid4())[:8]
         if isinstance(self.cell_type, str):
@@ -89,7 +91,7 @@ class MemCell:
         if isinstance(self.related_entities, list):
             self.related_entities = set(self.related_entities)
 
-    def matches_query(self, keywords: List[str], entity: Optional[str] = None) -> float:
+    def matches_query(self, keywords: list[str], entity: str | None = None) -> float:
         """
         Score how well this cell matches a query.
 
@@ -135,25 +137,26 @@ class MemScene:
     - Involve the same entities
     - Occurred in the same time period
     """
+
     id: str
-    cells: List[MemCell] = field(default_factory=list)
+    cells: list[MemCell] = field(default_factory=list)
     scene_type: SceneType = SceneType.CONVERSATION_TOPIC
 
     # Scene metadata
-    title: str = ""                 # Short title (e.g., "Caroline's camping trips")
-    summary: str = ""               # LLM-generated summary
-    entities: Set[str] = field(default_factory=set)
-    keywords: Set[str] = field(default_factory=set)
+    title: str = ""  # Short title (e.g., "Caroline's camping trips")
+    summary: str = ""  # LLM-generated summary
+    entities: set[str] = field(default_factory=set)
+    keywords: set[str] = field(default_factory=set)
 
     # Temporal bounds
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    session_ids: Set[str] = field(default_factory=set)
+    start_date: str | None = None
+    end_date: str | None = None
+    session_ids: set[str] = field(default_factory=set)
 
     # For retrieval
-    embedding: Optional[List[float]] = None
+    embedding: list[float] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.id:
             self.id = str(uuid.uuid4())[:8]
         if isinstance(self.scene_type, str):
@@ -185,7 +188,7 @@ class MemScene:
             if not self.end_date or cell.session_date > self.end_date:
                 self.end_date = cell.session_date
 
-    def matches_query(self, keywords: List[str], entity: Optional[str] = None) -> float:
+    def matches_query(self, keywords: list[str], entity: str | None = None) -> float:
         """Score how well this scene matches a query."""
         score = 0.0
 
@@ -210,7 +213,9 @@ class MemScene:
 
         return min(1.0, score)
 
-    def get_best_cells(self, keywords: List[str], entity: Optional[str] = None, top_k: int = 5) -> List[MemCell]:
+    def get_best_cells(
+        self, keywords: list[str], entity: str | None = None, top_k: int = 5
+    ) -> list[MemCell]:
         """Get the most relevant cells for a query."""
         scored = [(c, c.matches_query(keywords, entity)) for c in self.cells]
         scored.sort(key=lambda x: x[1], reverse=True)
@@ -245,20 +250,20 @@ class MemoryStore:
     - Scene-based context composition
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Primary storage
-        self.cells: Dict[str, MemCell] = {}
-        self.scenes: Dict[str, MemScene] = {}
+        self.cells: dict[str, MemCell] = {}
+        self.scenes: dict[str, MemScene] = {}
 
         # Indexes
-        self.cells_by_entity: Dict[str, List[str]] = {}      # entity -> [cell_ids]
-        self.cells_by_type: Dict[CellType, List[str]] = {}   # type -> [cell_ids]
-        self.cells_by_session: Dict[str, List[str]] = {}     # session_id -> [cell_ids]
-        self.scenes_by_entity: Dict[str, List[str]] = {}     # entity -> [scene_ids]
-        self.scenes_by_type: Dict[SceneType, List[str]] = {} # type -> [scene_ids]
+        self.cells_by_entity: dict[str, list[str]] = {}  # entity -> [cell_ids]
+        self.cells_by_type: dict[CellType, list[str]] = {}  # type -> [cell_ids]
+        self.cells_by_session: dict[str, list[str]] = {}  # session_id -> [cell_ids]
+        self.scenes_by_entity: dict[str, list[str]] = {}  # entity -> [scene_ids]
+        self.scenes_by_type: dict[SceneType, list[str]] = {}  # type -> [scene_ids]
 
         # Keyword index (inverted index)
-        self.keyword_index: Dict[str, Set[str]] = {}  # keyword -> {cell_ids}
+        self.keyword_index: dict[str, set[str]] = {}  # keyword -> {cell_ids}
 
     def add_cell(self, cell: MemCell) -> None:
         """Add a cell to storage and indexes."""
@@ -304,30 +309,30 @@ class MemoryStore:
             self.scenes_by_type[scene.scene_type] = []
         self.scenes_by_type[scene.scene_type].append(scene.id)
 
-    def get_cells_by_entity(self, entity: str) -> List[MemCell]:
+    def get_cells_by_entity(self, entity: str) -> list[MemCell]:
         """Get all cells about an entity."""
         cell_ids = self.cells_by_entity.get(entity.lower(), [])
         return [self.cells[cid] for cid in cell_ids]
 
-    def get_cells_by_keywords(self, keywords: List[str]) -> List[MemCell]:
+    def get_cells_by_keywords(self, keywords: list[str]) -> list[MemCell]:
         """Get cells matching any of the keywords."""
         cell_ids = set()
         for kw in keywords:
             cell_ids.update(self.keyword_index.get(kw.lower(), set()))
         return [self.cells[cid] for cid in cell_ids]
 
-    def get_scenes_by_entity(self, entity: str) -> List[MemScene]:
+    def get_scenes_by_entity(self, entity: str) -> list[MemScene]:
         """Get all scenes involving an entity."""
         scene_ids = self.scenes_by_entity.get(entity.lower(), [])
         return [self.scenes[sid] for sid in scene_ids]
 
     def search(
         self,
-        query_keywords: List[str],
-        entity: Optional[str] = None,
-        cell_types: Optional[List[CellType]] = None,
-        top_k: int = 20
-    ) -> List[Tuple[MemCell, float]]:
+        query_keywords: list[str],
+        entity: str | None = None,
+        cell_types: list[CellType] | None = None,
+        top_k: int = 20,
+    ) -> list[tuple[MemCell, float]]:
         """
         Search for relevant cells.
 
@@ -363,11 +368,8 @@ class MemoryStore:
         return scored[:top_k]
 
     def search_scenes(
-        self,
-        query_keywords: List[str],
-        entity: Optional[str] = None,
-        top_k: int = 5
-    ) -> List[Tuple[MemScene, float]]:
+        self, query_keywords: list[str], entity: str | None = None, top_k: int = 5
+    ) -> list[tuple[MemScene, float]]:
         """
         Search for relevant scenes.
 
@@ -390,10 +392,10 @@ class MemoryStore:
 
     def compose_context(
         self,
-        query_keywords: List[str],
-        entity: Optional[str] = None,
+        query_keywords: list[str],
+        entity: str | None = None,
         max_cells: int = 20,
-        include_scene_summaries: bool = True
+        include_scene_summaries: bool = True,
     ) -> str:
         """
         Compose retrieval context from matching scenes and cells.
@@ -427,7 +429,7 @@ class MemoryStore:
         cells = self.get_cells_by_entity(entity)
 
         # Group by type
-        by_type: Dict[CellType, List[MemCell]] = {}
+        by_type: dict[CellType, list[MemCell]] = {}
         for cell in cells:
             if cell.cell_type not in by_type:
                 by_type[cell.cell_type] = []
@@ -454,7 +456,7 @@ class MemoryStore:
 
         return "\n".join(parts)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get storage statistics."""
         return {
             "total_cells": len(self.cells),
@@ -466,10 +468,10 @@ class MemoryStore:
 
     def compose_multihop_context(
         self,
-        query_keywords: List[str],
-        entity: Optional[str] = None,
+        query_keywords: list[str],
+        entity: str | None = None,
         question_type: str = "general",
-        max_cells: int = 25
+        max_cells: int = 25,
     ) -> str:
         """
         INNOVATION: Scene-guided context composition for multi-hop questions.
@@ -531,7 +533,9 @@ class MemoryStore:
         remaining_cells = max_cells - len(seen_cell_ids)
         if remaining_cells > 0:
             additional_cells = self.search(query_keywords, entity, top_k=remaining_cells + 10)
-            additional = [(c, s) for c, s in additional_cells if c.id not in seen_cell_ids][:remaining_cells]
+            additional = [(c, s) for c, s in additional_cells if c.id not in seen_cell_ids][
+                :remaining_cells
+            ]
 
             if additional:
                 parts.append("\n## Additional Evidence")
@@ -542,10 +546,16 @@ class MemoryStore:
         # Step 5: For inference questions, add entity profile summary
         if question_type == "inference" and entity:
             # Get preference and fact cells for inference
-            pref_cells = [self.cells[cid] for cid in self.cells_by_type.get(CellType.PREFERENCE, [])
-                          if self.cells[cid].entity.lower() == entity.lower()]
-            fact_cells = [self.cells[cid] for cid in self.cells_by_type.get(CellType.FACT, [])
-                          if self.cells[cid].entity.lower() == entity.lower()]
+            pref_cells = [
+                self.cells[cid]
+                for cid in self.cells_by_type.get(CellType.PREFERENCE, [])
+                if self.cells[cid].entity.lower() == entity.lower()
+            ]
+            fact_cells = [
+                self.cells[cid]
+                for cid in self.cells_by_type.get(CellType.FACT, [])
+                if self.cells[cid].entity.lower() == entity.lower()
+            ]
 
             if pref_cells or fact_cells:
                 parts.append(f"\n## {entity}'s Profile")

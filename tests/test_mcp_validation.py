@@ -3,17 +3,17 @@
 import pytest
 
 from zerogmem.mcp_server import (
-    _validate_string,
-    _clamp_max_results,
     MAX_CONTENT_LENGTH,
-    MAX_SPEAKER_LENGTH,
-    MAX_QUERY_LENGTH,
-    MAX_TOPIC_LENGTH,
     MAX_ENTITY_LENGTH,
-    MAX_TIME_DESC_LENGTH,
-    MAX_METADATA_LENGTH,
-    MIN_MAX_RESULTS,
     MAX_MAX_RESULTS,
+    MAX_METADATA_LENGTH,
+    MAX_QUERY_LENGTH,
+    MAX_SPEAKER_LENGTH,
+    MAX_TIME_DESC_LENGTH,
+    MAX_TOPIC_LENGTH,
+    MIN_MAX_RESULTS,
+    _clamp_max_results,
+    _validate_string,
 )
 
 
@@ -78,6 +78,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_empty_speaker(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(speaker="", content="hello")
         assert "Error" in result
         assert "speaker" in result
@@ -85,6 +86,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_whitespace_speaker(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(speaker="   ", content="hello")
         assert "Error" in result
         assert "speaker" in result
@@ -92,6 +94,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_empty_content(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(speaker="user", content="   ")
         assert "Error" in result
         assert "content" in result
@@ -99,6 +102,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_oversized_content(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(speaker="user", content="x" * (MAX_CONTENT_LENGTH + 1))
         assert "Error" in result
         assert "exceeds" in result
@@ -106,6 +110,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_oversized_speaker(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(speaker="x" * (MAX_SPEAKER_LENGTH + 1), content="hello")
         assert "Error" in result
         assert "speaker" in result
@@ -113,6 +118,7 @@ class TestStoreMemoryValidation:
     @pytest.mark.asyncio
     async def test_oversized_metadata(self):
         from zerogmem.mcp_server import store_memory
+
         result = await store_memory(
             speaker="user", content="hello", metadata="x" * (MAX_METADATA_LENGTH + 1)
         )
@@ -126,6 +132,7 @@ class TestRetrieveMemoriesValidation:
     @pytest.mark.asyncio
     async def test_empty_query(self):
         from zerogmem.mcp_server import retrieve_memories
+
         result = await retrieve_memories(query="")
         assert "Error" in result
         assert "query" in result
@@ -133,6 +140,7 @@ class TestRetrieveMemoriesValidation:
     @pytest.mark.asyncio
     async def test_oversized_query(self):
         from zerogmem.mcp_server import retrieve_memories
+
         result = await retrieve_memories(query="x" * (MAX_QUERY_LENGTH + 1))
         assert "Error" in result
         assert "exceeds" in result
@@ -144,6 +152,7 @@ class TestSearchByEntityValidation:
     @pytest.mark.asyncio
     async def test_empty_entity(self):
         from zerogmem.mcp_server import search_memories_by_entity
+
         result = await search_memories_by_entity(entity_name="")
         assert "Error" in result
         assert "entity_name" in result
@@ -151,6 +160,7 @@ class TestSearchByEntityValidation:
     @pytest.mark.asyncio
     async def test_oversized_entity(self):
         from zerogmem.mcp_server import search_memories_by_entity
+
         result = await search_memories_by_entity(entity_name="x" * (MAX_ENTITY_LENGTH + 1))
         assert "Error" in result
         assert "exceeds" in result
@@ -162,6 +172,7 @@ class TestSearchByTimeValidation:
     @pytest.mark.asyncio
     async def test_empty_time(self):
         from zerogmem.mcp_server import search_memories_by_time
+
         result = await search_memories_by_time(time_description="")
         assert "Error" in result
         assert "time_description" in result
@@ -169,6 +180,7 @@ class TestSearchByTimeValidation:
     @pytest.mark.asyncio
     async def test_oversized_time(self):
         from zerogmem.mcp_server import search_memories_by_time
+
         result = await search_memories_by_time(time_description="x" * (MAX_TIME_DESC_LENGTH + 1))
         assert "Error" in result
         assert "exceeds" in result
@@ -180,6 +192,7 @@ class TestStartSessionValidation:
     @pytest.mark.asyncio
     async def test_oversized_topic(self):
         from zerogmem.mcp_server import start_new_session
+
         result = await start_new_session(topic="x" * (MAX_TOPIC_LENGTH + 1))
         assert "Error" in result
         assert "topic" in result
@@ -187,6 +200,7 @@ class TestStartSessionValidation:
     @pytest.mark.asyncio
     async def test_empty_topic_rejected(self):
         from zerogmem.mcp_server import start_new_session
+
         result = await start_new_session(topic="")
         assert "Error" in result
         assert "topic" in result
@@ -197,6 +211,7 @@ class TestStartSessionValidation:
         # This will try to initialize memory (and may fail without encoder),
         # but it should NOT fail with a validation error
         from zerogmem.mcp_server import start_new_session
+
         result = await start_new_session(topic=None)
         # Should not be a validation error — either succeeds or fails on init
         assert "topic" not in result or "Error" not in result or "must not be empty" not in result

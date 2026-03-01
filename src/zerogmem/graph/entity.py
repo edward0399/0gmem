@@ -10,12 +10,14 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, List, Dict, Set, Any, Tuple
+from typing import Any
+
 import networkx as nx
 
 
 class EntityType(Enum):
     """Types of entities in the memory system."""
+
     PERSON = "person"
     ORGANIZATION = "organization"
     LOCATION = "location"
@@ -29,8 +31,9 @@ class EntityType(Enum):
 @dataclass
 class TimeRange:
     """Time range for temporal scoping of relations."""
-    start: Optional[datetime] = None
-    end: Optional[datetime] = None
+
+    start: datetime | None = None
+    end: datetime | None = None
 
     def is_valid_at(self, timestamp: datetime) -> bool:
         """Check if the time range is valid at a given timestamp."""
@@ -44,21 +47,22 @@ class TimeRange:
 @dataclass
 class EntityNode:
     """A node representing an entity in the knowledge graph."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     name: str = ""
     entity_type: EntityType = EntityType.UNKNOWN
-    aliases: List[str] = field(default_factory=list)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    aliases: list[str] = field(default_factory=list)
+    attributes: dict[str, Any] = field(default_factory=dict)
     first_seen: datetime = field(default_factory=datetime.now)
     last_seen: datetime = field(default_factory=datetime.now)
     mention_count: int = 1
     importance: float = 0.5
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __hash__(self):
+    def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         if isinstance(other, EntityNode):
             return self.id == other.id
         return False
@@ -77,17 +81,18 @@ class EntityNode:
 @dataclass
 class EntityEdge:
     """An edge representing a relationship between entities."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     source_id: str = ""
     target_id: str = ""
     relation: str = ""  # e.g., "knows", "works_at", "lives_in", "owns"
     negated: bool = False  # Is this a negative relation? (e.g., "does NOT know")
     confidence: float = 1.0
-    temporal_scope: Optional[TimeRange] = None  # When was this relation valid?
-    evidence: List[str] = field(default_factory=list)  # Memory IDs supporting this
+    temporal_scope: TimeRange | None = None  # When was this relation valid?
+    evidence: list[str] = field(default_factory=list)  # Memory IDs supporting this
     first_seen: datetime = field(default_factory=datetime.now)
     last_confirmed: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class EntityGraph:
@@ -110,13 +115,13 @@ class EntityGraph:
         "concept": ["interested_in", "believes", "likes", "dislikes", "prefers"],
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.graph = nx.MultiDiGraph()  # Multi-graph to allow multiple relations
-        self.nodes: Dict[str, EntityNode] = {}
-        self.edges: Dict[str, EntityEdge] = {}
+        self.nodes: dict[str, EntityNode] = {}
+        self.edges: dict[str, EntityEdge] = {}
         # Indexes for efficient lookup
-        self._name_index: Dict[str, Set[str]] = {}  # name -> node_ids
-        self._type_index: Dict[EntityType, Set[str]] = {}  # type -> node_ids
+        self._name_index: dict[str, set[str]] = {}  # name -> node_ids
+        self._type_index: dict[EntityType, set[str]] = {}  # type -> node_ids
 
     def add_node(self, node: EntityNode) -> str:
         """Add an entity node to the graph."""
@@ -158,16 +163,12 @@ class EntityGraph:
             relation=edge.relation,
             negated=edge.negated,
             confidence=edge.confidence,
-            data=edge
+            data=edge,
         )
         return edge.id
 
     def add_negative_relation(
-        self,
-        source_id: str,
-        target_id: str,
-        relation: str,
-        evidence: List[str] = None
+        self, source_id: str, target_id: str, relation: str, evidence: list[str] | None = None
     ) -> str:
         """
         Add an explicit negative relation.
@@ -178,11 +179,11 @@ class EntityGraph:
             target_id=target_id,
             relation=relation,
             negated=True,
-            evidence=evidence or []
+            evidence=evidence or [],
         )
         return self.add_edge(edge)
 
-    def find_by_name(self, name: str, fuzzy: bool = True) -> List[EntityNode]:
+    def find_by_name(self, name: str, fuzzy: bool = True) -> list[EntityNode]:
         """Find entities by name."""
         name_lower = name.lower()
 
@@ -200,7 +201,7 @@ class EntityGraph:
 
         return []
 
-    def find_by_type(self, entity_type: EntityType) -> List[EntityNode]:
+    def find_by_type(self, entity_type: EntityType) -> list[EntityNode]:
         """Find all entities of a specific type."""
         if entity_type not in self._type_index:
             return []
@@ -209,10 +210,10 @@ class EntityGraph:
     def get_relations(
         self,
         entity_id: str,
-        relation_filter: Optional[List[str]] = None,
+        relation_filter: list[str] | None = None,
         include_negated: bool = True,
-        at_time: Optional[datetime] = None
-    ) -> List[Tuple[EntityNode, EntityEdge]]:
+        at_time: datetime | None = None,
+    ) -> list[tuple[EntityNode, EntityEdge]]:
         """
         Get all relations for an entity.
 
@@ -266,12 +267,8 @@ class EntityGraph:
         return results
 
     def has_relation(
-        self,
-        source_id: str,
-        target_id: str,
-        relation: str,
-        check_negation: bool = True
-    ) -> Tuple[bool, Optional[bool]]:
+        self, source_id: str, target_id: str, relation: str, check_negation: bool = True
+    ) -> tuple[bool, bool | None]:
         """
         Check if a relation exists between two entities.
 
@@ -292,7 +289,9 @@ class EntityGraph:
 
         return (False, None)
 
-    def check_contradiction(self, entity_id: str, relation: str, target_id: str) -> Optional[EntityEdge]:
+    def check_contradiction(
+        self, entity_id: str, relation: str, target_id: str
+    ) -> EntityEdge | None:
         """
         Check if asserting this relation would contradict existing knowledge.
         Returns the contradicting edge if found.
@@ -308,7 +307,7 @@ class EntityGraph:
 
         return None
 
-    def get_entity_profile(self, entity_id: str) -> Dict[str, Any]:
+    def get_entity_profile(self, entity_id: str) -> dict[str, Any]:
         """Get a comprehensive profile of an entity."""
         node = self.nodes.get(entity_id)
         if not node:
@@ -316,7 +315,22 @@ class EntityGraph:
 
         relations = self.get_relations(entity_id)
 
-        profile = {
+        relations_list: list[dict[str, object]] = []
+        negative_relations_list: list[dict[str, object]] = []
+
+        for related_node, edge in relations:
+            rel_info: dict[str, object] = {
+                "entity": related_node.name,
+                "entity_id": related_node.id,
+                "relation": edge.relation,
+                "confidence": edge.confidence,
+            }
+            if edge.negated:
+                negative_relations_list.append(rel_info)
+            else:
+                relations_list.append(rel_info)
+
+        profile: dict[str, Any] = {
             "id": node.id,
             "name": node.name,
             "type": node.entity_type.value,
@@ -325,30 +339,15 @@ class EntityGraph:
             "first_seen": node.first_seen.isoformat(),
             "last_seen": node.last_seen.isoformat(),
             "mention_count": node.mention_count,
-            "relations": [],
-            "negative_relations": [],
+            "relations": relations_list,
+            "negative_relations": negative_relations_list,
         }
-
-        for related_node, edge in relations:
-            rel_info = {
-                "entity": related_node.name,
-                "entity_id": related_node.id,
-                "relation": edge.relation,
-                "confidence": edge.confidence,
-            }
-            if edge.negated:
-                profile["negative_relations"].append(rel_info)
-            else:
-                profile["relations"].append(rel_info)
 
         return profile
 
     def find_path(
-        self,
-        source_id: str,
-        target_id: str,
-        max_hops: int = 3
-    ) -> List[List[Tuple[str, EntityEdge]]]:
+        self, source_id: str, target_id: str, max_hops: int = 3
+    ) -> list[list[tuple[str, EntityEdge]]]:
         """
         Find paths between two entities.
         Used for multi-hop reasoning.
@@ -358,26 +357,29 @@ class EntityGraph:
 
         try:
             # Find all simple paths up to max_hops
-            paths = list(nx.all_simple_paths(
-                self.graph.to_undirected(),
-                source_id,
-                target_id,
-                cutoff=max_hops
-            ))
+            paths = list(
+                nx.all_simple_paths(
+                    self.graph.to_undirected(), source_id, target_id, cutoff=max_hops
+                )
+            )
 
             result_paths = []
             for path in paths:
                 path_with_edges = []
                 for i in range(len(path) - 1):
                     # Get edge between consecutive nodes
-                    edge_keys = list(self.graph.get_edge_data(path[i], path[i+1], default={}).keys())
+                    edge_keys = list(
+                        self.graph.get_edge_data(path[i], path[i + 1], default={}).keys()
+                    )
                     if not edge_keys:
-                        edge_keys = list(self.graph.get_edge_data(path[i+1], path[i], default={}).keys())
+                        edge_keys = list(
+                            self.graph.get_edge_data(path[i + 1], path[i], default={}).keys()
+                        )
 
                     if edge_keys:
                         edge = self.edges.get(edge_keys[0])
                         if edge:
-                            path_with_edges.append((path[i+1], edge))
+                            path_with_edges.append((path[i + 1], edge))
 
                 if path_with_edges:
                     result_paths.append(path_with_edges)
@@ -387,7 +389,7 @@ class EntityGraph:
         except nx.NetworkXNoPath:
             return []
 
-    def merge_entities(self, entity_ids: List[str], primary_id: Optional[str] = None) -> str:
+    def merge_entities(self, entity_ids: list[str], primary_id: str | None = None) -> str:
         """
         Merge multiple entity nodes into one (entity resolution).
         Returns the ID of the merged entity.
@@ -451,11 +453,11 @@ class EntityGraph:
 
         return primary_id
 
-    def get_node(self, node_id: str) -> Optional[EntityNode]:
+    def get_node(self, node_id: str) -> EntityNode | None:
         """Get a node by ID."""
         return self.nodes.get(node_id)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize graph to dictionary."""
         return {
             "nodes": [
@@ -484,18 +486,30 @@ class EntityGraph:
                     "evidence": e.evidence,
                     "first_seen": e.first_seen.isoformat(),
                     "last_confirmed": e.last_confirmed.isoformat(),
-                    "temporal_scope": {
-                        "start": e.temporal_scope.start.isoformat() if e.temporal_scope and e.temporal_scope.start else None,
-                        "end": e.temporal_scope.end.isoformat() if e.temporal_scope and e.temporal_scope.end else None,
-                    } if e.temporal_scope else None,
+                    "temporal_scope": (
+                        {
+                            "start": (
+                                e.temporal_scope.start.isoformat()
+                                if e.temporal_scope and e.temporal_scope.start
+                                else None
+                            ),
+                            "end": (
+                                e.temporal_scope.end.isoformat()
+                                if e.temporal_scope and e.temporal_scope.end
+                                else None
+                            ),
+                        }
+                        if e.temporal_scope
+                        else None
+                    ),
                     "metadata": e.metadata,
                 }
                 for e in self.edges.values()
-            ]
+            ],
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EntityGraph":
+    def from_dict(cls, data: dict[str, Any]) -> EntityGraph:
         """Deserialize graph from dictionary."""
         graph = cls()
         for nd in data.get("nodes", []):
@@ -530,8 +544,16 @@ class EntityGraph:
                 confidence=ed.get("confidence", 1.0),
                 temporal_scope=temporal_scope,
                 evidence=ed.get("evidence", []),
-                first_seen=datetime.fromisoformat(ed["first_seen"]) if ed.get("first_seen") else datetime.now(),
-                last_confirmed=datetime.fromisoformat(ed["last_confirmed"]) if ed.get("last_confirmed") else datetime.now(),
+                first_seen=(
+                    datetime.fromisoformat(ed["first_seen"])
+                    if ed.get("first_seen")
+                    else datetime.now()
+                ),
+                last_confirmed=(
+                    datetime.fromisoformat(ed["last_confirmed"])
+                    if ed.get("last_confirmed")
+                    else datetime.now()
+                ),
                 metadata=ed.get("metadata", {}),
             )
             graph.add_edge(edge)

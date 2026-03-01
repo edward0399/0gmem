@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from zerogmem.encoder.encoder import Encoder, EncoderConfig, EncodingResult
+from zerogmem.encoder.encoder import EncodingResult
 
 
 class TestEncoder:

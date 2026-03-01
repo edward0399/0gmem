@@ -82,12 +82,23 @@ target-version = ["py310"]
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/zerogmem/evaluation/locomo.py" = ["E501"]
+"src/zerogmem/mcp_server.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.10"
 strict = true
 ignore_missing_imports = true
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = "zerogmem.evaluation.*"
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

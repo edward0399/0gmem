@@ -1,9 +1,8 @@
 """Tests for EntityGraph: entity tracking and relationship management."""
 
 from zerogmem.graph.entity import (
-    EntityGraph,
-    EntityNode,
     EntityEdge,
+    EntityNode,
     EntityType,
 )
 
@@ -117,7 +116,9 @@ class TestEntityGraph:
         entity_graph.add_node(alice)
         entity_graph.add_node(bob)
 
-        entity_graph.add_edge(EntityEdge(source_id=alice.id, target_id=bob.id, relation="likes", negated=True))
+        entity_graph.add_edge(
+            EntityEdge(source_id=alice.id, target_id=bob.id, relation="likes", negated=True)
+        )
 
         relations = entity_graph.get_relations(alice.id, include_negated=False)
         assert len(relations) == 0

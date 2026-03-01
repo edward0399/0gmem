@@ -10,7 +10,8 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple, Set
+from typing import Any
+
 import numpy as np
 
 
@@ -22,6 +23,7 @@ class Fact:
     Key design: Track BOTH supporting evidence AND contradictions
     for adversarial robustness.
     """
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     content: str = ""  # The fact statement
     subject: str = ""  # Subject entity
@@ -30,8 +32,8 @@ class Fact:
 
     # Confidence and provenance
     confidence: float = 1.0  # How certain are we?
-    sources: List[str] = field(default_factory=list)  # Episode IDs supporting this
-    contradictions: List[str] = field(default_factory=list)  # Episode IDs contradicting this
+    sources: list[str] = field(default_factory=list)  # Episode IDs supporting this
+    contradictions: list[str] = field(default_factory=list)  # Episode IDs contradicting this
 
     # Temporal tracking
     first_learned: datetime = field(default_factory=datetime.now)
@@ -40,16 +42,16 @@ class Fact:
 
     # Negation handling
     negated: bool = False  # Is this explicitly NOT true?
-    negation_source: Optional[str] = None  # Episode that negated this
+    negation_source: str | None = None  # Episode that negated this
 
     # Embedding for similarity
-    embedding: Optional[np.ndarray] = None
+    embedding: np.ndarray | None = None
 
     # Categorization
     category: str = ""  # preference, attribute, relation, event_fact, etc.
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def confirm(self, source_id: str) -> None:
         """Confirm this fact with additional evidence."""
@@ -77,9 +79,9 @@ class Fact:
     def is_reliable(self) -> bool:
         """Check if fact is considered reliable."""
         return (
-            self.confidence >= 0.5 and
-            not self.negated and
-            len(self.contradictions) < len(self.sources)
+            self.confidence >= 0.5
+            and not self.negated
+            and len(self.contradictions) < len(self.sources)
         )
 
 
@@ -96,31 +98,31 @@ class SemanticMemoryStore:
 
     # Fact categories
     CATEGORIES = [
-        "preference",     # User likes/dislikes
-        "attribute",      # Entity properties
-        "relation",       # Entity relationships
-        "event_fact",     # Facts about events
-        "belief",         # Opinions/beliefs
-        "skill",          # Abilities/capabilities
-        "habit",          # Behavioral patterns
-        "biographical",   # Life facts
+        "preference",  # User likes/dislikes
+        "attribute",  # Entity properties
+        "relation",  # Entity relationships
+        "event_fact",  # Facts about events
+        "belief",  # Opinions/beliefs
+        "skill",  # Abilities/capabilities
+        "habit",  # Behavioral patterns
+        "biographical",  # Life facts
     ]
 
-    def __init__(self):
-        self.facts: Dict[str, Fact] = {}
+    def __init__(self) -> None:
+        self.facts: dict[str, Fact] = {}
 
         # Indexes
-        self._subject_index: Dict[str, Set[str]] = {}  # subject -> fact_ids
-        self._predicate_index: Dict[str, Set[str]] = {}  # predicate -> fact_ids
-        self._object_index: Dict[str, Set[str]] = {}  # object -> fact_ids
-        self._category_index: Dict[str, Set[str]] = {}  # category -> fact_ids
-        self._negated_facts: Set[str] = set()  # fact_ids that are negated
+        self._subject_index: dict[str, set[str]] = {}  # subject -> fact_ids
+        self._predicate_index: dict[str, set[str]] = {}  # predicate -> fact_ids
+        self._object_index: dict[str, set[str]] = {}  # object -> fact_ids
+        self._category_index: dict[str, set[str]] = {}  # category -> fact_ids
+        self._negated_facts: set[str] = set()  # fact_ids that are negated
 
         # Embeddings
-        self._embeddings: List[np.ndarray] = []
-        self._embedding_ids: List[str] = []
+        self._embeddings: list[np.ndarray] = []
+        self._embedding_ids: list[str] = []
 
-    def add_fact(self, fact: Fact) -> Tuple[str, bool]:
+    def add_fact(self, fact: Fact) -> tuple[str, bool]:
         """
         Add a fact to semantic memory.
 
@@ -180,7 +182,7 @@ class SemanticMemoryStore:
             self._embeddings.append(fact.embedding)
             self._embedding_ids.append(fact.id)
 
-    def _find_similar_fact(self, fact: Fact) -> Optional[Fact]:
+    def _find_similar_fact(self, fact: Fact) -> Fact | None:
         """Find an existing fact that is essentially the same."""
         # Check by subject-predicate-object match
         if fact.subject and fact.predicate:
@@ -192,7 +194,7 @@ class SemanticMemoryStore:
                         return existing
         return None
 
-    def _find_contradicting_facts(self, fact: Fact) -> List[Fact]:
+    def _find_contradicting_facts(self, fact: Fact) -> list[Fact]:
         """Find facts that contradict this fact."""
         contradictions = []
 
@@ -216,17 +218,17 @@ class SemanticMemoryStore:
 
         return contradictions
 
-    def get_fact(self, fact_id: str) -> Optional[Fact]:
+    def get_fact(self, fact_id: str) -> Fact | None:
         """Get a fact by ID."""
         return self.facts.get(fact_id)
 
     def get_facts_about(
         self,
         subject: str,
-        predicate: Optional[str] = None,
+        predicate: str | None = None,
         include_negated: bool = False,
-        min_confidence: float = 0.0
-    ) -> List[Fact]:
+        min_confidence: float = 0.0,
+    ) -> list[Fact]:
         """Get facts about a subject."""
         fact_ids = self._subject_index.get(subject, set())
 
@@ -250,11 +252,7 @@ class SemanticMemoryStore:
         results.sort(key=lambda f: f.confidence, reverse=True)
         return results
 
-    def get_facts_by_predicate(
-        self,
-        predicate: str,
-        include_negated: bool = False
-    ) -> List[Fact]:
+    def get_facts_by_predicate(self, predicate: str, include_negated: bool = False) -> list[Fact]:
         """Get all facts with a specific predicate."""
         fact_ids = self._predicate_index.get(predicate, set())
 
@@ -266,11 +264,7 @@ class SemanticMemoryStore:
 
         return results
 
-    def get_facts_by_category(
-        self,
-        category: str,
-        subject: Optional[str] = None
-    ) -> List[Fact]:
+    def get_facts_by_category(self, category: str, subject: str | None = None) -> list[Fact]:
         """Get facts in a category."""
         fact_ids = self._category_index.get(category, set())
 
@@ -285,11 +279,8 @@ class SemanticMemoryStore:
         return results
 
     def search_similar(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 10,
-        threshold: float = 0.0
-    ) -> List[Tuple[Fact, float]]:
+        self, query_embedding: np.ndarray, top_k: int = 10, threshold: float = 0.0
+    ) -> list[tuple[Fact, float]]:
         """Search for similar facts by embedding."""
         if not self._embeddings:
             return []
@@ -306,12 +297,7 @@ class SemanticMemoryStore:
         results.sort(key=lambda x: x[1], reverse=True)
         return results[:top_k]
 
-    def check_negation(
-        self,
-        subject: str,
-        predicate: str,
-        obj: str
-    ) -> Tuple[bool, Optional[Fact]]:
+    def check_negation(self, subject: str, predicate: str, obj: str) -> tuple[bool, Fact | None]:
         """
         Check if a fact is explicitly negated.
 
@@ -327,13 +313,7 @@ class SemanticMemoryStore:
 
         return False, None
 
-    def add_negation(
-        self,
-        subject: str,
-        predicate: str,
-        obj: str,
-        source_id: str
-    ) -> str:
+    def add_negation(self, subject: str, predicate: str, obj: str, source_id: str) -> str:
         """Explicitly add a negated fact."""
         fact = Fact(
             content=f"{subject} does NOT {predicate} {obj}",
@@ -349,38 +329,30 @@ class SemanticMemoryStore:
         return fact_id
 
     def get_reliable_facts(
-        self,
-        subject: Optional[str] = None,
-        min_confirmations: int = 1
-    ) -> List[Fact]:
+        self, subject: str | None = None, min_confirmations: int = 1
+    ) -> list[Fact]:
         """Get facts that are considered reliable."""
-        facts = self.facts.values()
+        all_facts: list[Fact] = list(self.facts.values())
 
         if subject:
             fact_ids = self._subject_index.get(subject, set())
-            facts = [self.facts[fid] for fid in fact_ids if fid in self.facts]
+            all_facts = [self.facts[fid] for fid in fact_ids if fid in self.facts]
 
-        return [
-            f for f in facts
-            if f.is_reliable and f.confirmation_count >= min_confirmations
-        ]
+        return [f for f in all_facts if f.is_reliable and f.confirmation_count >= min_confirmations]
 
-    def get_contradicted_facts(self) -> List[Fact]:
+    def get_contradicted_facts(self) -> list[Fact]:
         """Get facts that have contradictions."""
         return [f for f in self.facts.values() if f.contradictions]
 
-    def get_negated_facts(self) -> List[Fact]:
+    def get_negated_facts(self) -> list[Fact]:
         """Get all negated facts."""
-        return [
-            self.facts[fid] for fid in self._negated_facts
-            if fid in self.facts
-        ]
+        return [self.facts[fid] for fid in self._negated_facts if fid in self.facts]
 
-    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+    def get_user_profile(self, user_id: str) -> dict[str, Any]:
         """Get compiled profile for a user from their facts."""
         facts = self.get_facts_about(user_id, include_negated=True)
 
-        profile = {
+        profile: dict[str, Any] = {
             "user_id": user_id,
             "preferences": [],
             "attributes": [],
@@ -457,10 +429,14 @@ class SemanticMemoryStore:
         confirmations = min(1.0, fact.confirmation_count / 5)
         contradiction_penalty = max(0.1, 1.0 - 0.3 * len(fact.contradictions))
         negated_penalty = 0.1 if fact.negated else 1.0
-        return (0.2 * recency + 0.3 * confirmations + 0.3 * fact.confidence
-                + 0.2 * contradiction_penalty) * negated_penalty
+        return (
+            0.2 * recency
+            + 0.3 * confirmations
+            + 0.3 * fact.confidence
+            + 0.2 * contradiction_penalty
+        ) * negated_penalty
 
-    def enforce_capacity(self, max_facts: int) -> List[str]:
+    def enforce_capacity(self, max_facts: int) -> list[str]:
         """Evict lowest-scored facts if over capacity.
 
         Returns list of removed fact IDs.
@@ -468,10 +444,7 @@ class SemanticMemoryStore:
         if len(self.facts) <= max_facts:
             return []
 
-        scored = [
-            (fid, self._eviction_score(f))
-            for fid, f in self.facts.items()
-        ]
+        scored = [(fid, self._eviction_score(f)) for fid, f in self.facts.items()]
         scored.sort(key=lambda x: x[1])
 
         to_remove = len(self.facts) - max_facts
@@ -490,7 +463,7 @@ class SemanticMemoryStore:
             return 0.0
         return float(np.dot(a, b) / (norm_a * norm_b))
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get statistics about semantic memory."""
         return {
             "total_facts": len(self.facts),
@@ -498,13 +471,10 @@ class SemanticMemoryStore:
             "contradicted_facts": len(self.get_contradicted_facts()),
             "unique_subjects": len(self._subject_index),
             "unique_predicates": len(self._predicate_index),
-            "categories": {
-                cat: len(fids)
-                for cat, fids in self._category_index.items()
-            },
+            "categories": {cat: len(fids) for cat, fids in self._category_index.items()},
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize semantic memory.
 
         Note: Embeddings are NOT included. They must be saved separately
@@ -537,9 +507,9 @@ class SemanticMemoryStore:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
-    ) -> "SemanticMemoryStore":
+        data: dict[str, Any],
+        embeddings_map: dict[str, np.ndarray] | None = None,
+    ) -> SemanticMemoryStore:
         """Deserialize semantic memory from dictionary.
 
         Args:

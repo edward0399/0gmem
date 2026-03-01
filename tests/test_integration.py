@@ -4,13 +4,12 @@ Integration tests for 0GMem.
 These tests verify the end-to-end workflow of the memory system.
 """
 
-import pytest
 from zerogmem import (
-    MemoryManager,
     Encoder,
-    Retriever,
     MemoryConfig,
+    MemoryManager,
     RetrievalResponse,
+    Retriever,
 )
 
 
@@ -27,7 +26,7 @@ class TestMemoryWorkflow:
         assert memory.current_session_id == session_id
 
         # End session
-        episode_id = memory.end_session()
+        memory.end_session()
         assert memory.current_session_id is None
 
     def test_add_messages(self, memory_with_embeddings):
@@ -102,21 +101,23 @@ class TestImports:
 
     def test_core_imports(self):
         """Test core class imports."""
-        from zerogmem import MemoryManager, Encoder, Retriever
+
         assert MemoryManager is not None
         assert Encoder is not None
         assert Retriever is not None
 
     def test_config_imports(self):
         """Test configuration class imports."""
-        from zerogmem import MemoryConfig, EncoderConfig, RetrieverConfig
+        from zerogmem import EncoderConfig, RetrieverConfig
+
         assert MemoryConfig is not None
         assert EncoderConfig is not None
         assert RetrieverConfig is not None
 
     def test_data_type_imports(self):
         """Test data type imports."""
-        from zerogmem import RetrievalResult, RetrievalResponse, QueryAnalysis
+        from zerogmem import QueryAnalysis, RetrievalResponse, RetrievalResult
+
         assert RetrievalResult is not None
         assert RetrievalResponse is not None
         assert QueryAnalysis is not None
@@ -124,6 +125,7 @@ class TestImports:
     def test_version(self):
         """Test version is accessible."""
         from zerogmem import __version__
+
         assert __version__ is not None
         assert isinstance(__version__, str)
 
@@ -133,7 +135,6 @@ class TestConfiguration:
 
     def test_memory_config_defaults(self):
         """Test MemoryConfig has sensible defaults."""
-        from zerogmem import MemoryConfig
 
         config = MemoryConfig()
         assert config.working_memory_capacity > 0
@@ -141,7 +142,6 @@ class TestConfiguration:
 
     def test_memory_config_custom(self):
         """Test custom MemoryConfig values."""
-        from zerogmem import MemoryConfig
 
         config = MemoryConfig(
             working_memory_capacity=50,

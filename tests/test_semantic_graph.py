@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from zerogmem.graph.semantic import SemanticGraph, SemanticNode, SemanticEdge
+from zerogmem.graph.semantic import SemanticEdge, SemanticNode
 
 
 class TestSemanticGraph:
@@ -73,7 +73,9 @@ class TestSemanticGraph:
         semantic_graph.add_node(n2)
         semantic_graph.add_node(n3)
 
-        semantic_graph.add_edge(SemanticEdge(source_id=n1.id, target_id=n2.id, relation="related_to"))
+        semantic_graph.add_edge(
+            SemanticEdge(source_id=n1.id, target_id=n2.id, relation="related_to")
+        )
         semantic_graph.add_edge(SemanticEdge(source_id=n2.id, target_id=n3.id, relation="is_a"))
 
         results = semantic_graph.find_related(n1.id, max_depth=2)
@@ -89,7 +91,9 @@ class TestSemanticGraph:
         semantic_graph.add_node(n3)
 
         semantic_graph.add_edge(SemanticEdge(source_id=n1.id, target_id=n2.id, relation="is_a"))
-        semantic_graph.add_edge(SemanticEdge(source_id=n1.id, target_id=n3.id, relation="similar_to"))
+        semantic_graph.add_edge(
+            SemanticEdge(source_id=n1.id, target_id=n3.id, relation="similar_to")
+        )
 
         results = semantic_graph.find_related(n1.id, relation_filter=["is_a"], max_depth=1)
         assert len(results) == 1

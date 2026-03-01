@@ -1,21 +1,21 @@
 """Tests for memory limits, capacity enforcement, and garbage collection."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
 from zerogmem.graph.temporal import TimeInterval
-from zerogmem.memory.episodic import EpisodicMemory, Episode, EpisodeMessage
-from zerogmem.memory.semantic import SemanticMemoryStore, Fact
-from zerogmem.memory.manager import MemoryManager, MemoryConfig
-
+from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
+from zerogmem.memory.episodic import Episode, EpisodicMemory
+from zerogmem.memory.manager import MemoryConfig, MemoryManager
+from zerogmem.memory.semantic import Fact, SemanticMemoryStore
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_embedding(seed: int = 0) -> np.ndarray:
     np.random.seed(seed)
@@ -27,9 +27,13 @@ def _mock_embedding_fn(text: str) -> np.ndarray:
     return np.random.randn(1536).astype(np.float32)
 
 
-def _make_memory(graph: UnifiedMemoryGraph, content: str = "test",
-                 session_id: str = None, entities: list = None,
-                 concepts: list = None) -> UnifiedMemoryItem:
+def _make_memory(
+    graph: UnifiedMemoryGraph,
+    content: str = "test",
+    session_id: str = None,
+    entities: list = None,
+    concepts: list = None,
+) -> UnifiedMemoryItem:
     """Add a memory with embedding to the graph and return it."""
     item = UnifiedMemoryItem(
         content=content,
@@ -46,6 +50,7 @@ def _make_memory(graph: UnifiedMemoryGraph, content: str = "test",
 # ---------------------------------------------------------------------------
 # UnifiedMemoryGraph.remove_memory()
 # ---------------------------------------------------------------------------
+
 
 class TestRemoveMemory:
     """Tests for UnifiedMemoryGraph.remove_memory()."""
@@ -107,14 +112,20 @@ class TestRemoveMemory:
 # EpisodicMemory
 # ---------------------------------------------------------------------------
 
+
 class TestEpisodicRemoval:
     """Tests for EpisodicMemory.remove_episode() and enforce_capacity()."""
 
-    def _make_episode(self, store: EpisodicMemory, age_days: int = 0,
-                      retrieval_count: int = 0, importance: float = 0.5,
-                      session_id: str = None,
-                      participant_names: list = None,
-                      topics: list = None) -> Episode:
+    def _make_episode(
+        self,
+        store: EpisodicMemory,
+        age_days: int = 0,
+        retrieval_count: int = 0,
+        importance: float = 0.5,
+        session_id: str = None,
+        participant_names: list = None,
+        topics: list = None,
+    ) -> Episode:
         ep = Episode(
             session_id=session_id or "sess",
             start_time=datetime.now() - timedelta(days=age_days),
@@ -131,7 +142,9 @@ class TestEpisodicRemoval:
     def test_remove_episode_cleans_indexes(self):
         store = EpisodicMemory()
         ep = self._make_episode(
-            store, participant_names=["Alice"], topics=["work"],
+            store,
+            participant_names=["Alice"],
+            topics=["work"],
             session_id="s1",
         )
 
@@ -169,14 +182,11 @@ class TestEpisodicRemoval:
     def test_eviction_prefers_old_unaccessed(self):
         store = EpisodicMemory()
         # Old, unaccessed episode (should be evicted first)
-        old_ep = self._make_episode(store, age_days=365, retrieval_count=0,
-                                     importance=0.1)
+        old_ep = self._make_episode(store, age_days=365, retrieval_count=0, importance=0.1)
         # Recent, accessed episode (should be kept)
-        new_ep = self._make_episode(store, age_days=1, retrieval_count=10,
-                                     importance=0.9)
+        new_ep = self._make_episode(store, age_days=1, retrieval_count=10, importance=0.9)
         # Mid episode
-        mid_ep = self._make_episode(store, age_days=30, retrieval_count=2,
-                                     importance=0.5)
+        mid_ep = self._make_episode(store, age_days=30, retrieval_count=2, importance=0.5)
 
         removed = store.enforce_capacity(max_episodes=2)
 
@@ -191,16 +201,22 @@ class TestEpisodicRemoval:
 # SemanticMemoryStore
 # ---------------------------------------------------------------------------
 
+
 class TestSemanticRemoval:
     """Tests for SemanticMemoryStore.remove_fact() and enforce_capacity()."""
 
-    def _make_fact(self, store: SemanticMemoryStore, subject: str = "Alice",
-                   predicate: str = "likes", obj: str = "cats",
-                   category: str = "preference",
-                   confidence: float = 1.0,
-                   confirmation_count: int = 1,
-                   negated: bool = False,
-                   age_days: int = 0) -> Fact:
+    def _make_fact(
+        self,
+        store: SemanticMemoryStore,
+        subject: str = "Alice",
+        predicate: str = "likes",
+        obj: str = "cats",
+        category: str = "preference",
+        confidence: float = 1.0,
+        confirmation_count: int = 1,
+        negated: bool = False,
+        age_days: int = 0,
+    ) -> Fact:
         fact = Fact(
             content=f"{subject} {predicate} {obj}",
             subject=subject,
@@ -223,8 +239,9 @@ class TestSemanticRemoval:
 
     def test_remove_fact_cleans_indexes(self):
         store = SemanticMemoryStore()
-        fact = self._make_fact(store, subject="Bob", predicate="lives_in",
-                               obj="NYC", category="biographical")
+        fact = self._make_fact(
+            store, subject="Bob", predicate="lives_in", obj="NYC", category="biographical"
+        )
 
         assert fact.id in store.facts
         assert fact.id in store._subject_index["Bob"]
@@ -272,14 +289,13 @@ class TestSemanticRemoval:
     def test_eviction_prefers_low_confidence_negated(self):
         store = SemanticMemoryStore()
         # Low confidence, negated (should be evicted first)
-        bad_fact = self._make_fact(store, subject="X", obj="Y",
-                                    confidence=0.1, negated=True,
-                                    age_days=100)
+        bad_fact = self._make_fact(
+            store, subject="X", obj="Y", confidence=0.1, negated=True, age_days=100
+        )
         # High confidence, confirmed (should be kept)
-        good_fact = self._make_fact(store, subject="A", obj="B",
-                                     confidence=1.0,
-                                     confirmation_count=5,
-                                     age_days=1)
+        good_fact = self._make_fact(
+            store, subject="A", obj="B", confidence=1.0, confirmation_count=5, age_days=1
+        )
 
         removed = store.enforce_capacity(max_facts=1)
 
@@ -290,6 +306,7 @@ class TestSemanticRemoval:
 # ---------------------------------------------------------------------------
 # MemoryManager integration
 # ---------------------------------------------------------------------------
+
 
 class TestManagerEviction:
     """Tests for MemoryManager capacity enforcement wiring."""
@@ -330,8 +347,7 @@ class TestManagerEviction:
         assert len(mm.graph.memories) == 1
 
     def test_config_serialization_roundtrip(self):
-        config = MemoryConfig(max_episodes=100, max_facts=200,
-                              eviction_batch_size=5)
+        config = MemoryConfig(max_episodes=100, max_facts=200, eviction_batch_size=5)
         mm = MemoryManager(config=config)
         mm.set_embedding_function(_mock_embedding_fn)
 
@@ -358,6 +374,7 @@ class TestManagerEviction:
 # MCP summary display
 # ---------------------------------------------------------------------------
 
+
 class TestMCPCapacityDisplay:
     """Test that get_memory_summary shows capacity info."""
 
@@ -367,11 +384,13 @@ class TestMCPCapacityDisplay:
 
         mm = MagicMock()
         mm.get_stats.return_value = {
-            "episodic_memory": {"total_episodes": 10, "total_messages": 50,
-                                "unique_participants": 2},
+            "episodic_memory": {
+                "total_episodes": 10,
+                "total_messages": 50,
+                "unique_participants": 2,
+            },
             "semantic_memory": {"total_facts": 25},
-            "graph": {"entity_nodes": 5, "semantic_nodes": 10,
-                       "temporal_nodes": 10},
+            "graph": {"entity_nodes": 5, "semantic_nodes": 10, "temporal_nodes": 10},
             "current_session": None,
             "capacity": {
                 "max_episodes": 500,

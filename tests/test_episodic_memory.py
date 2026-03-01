@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from zerogmem.memory.episodic import EpisodicMemory, Episode, EpisodeMessage
+from zerogmem.memory.episodic import Episode, EpisodeMessage
 
 
 class TestEpisode:

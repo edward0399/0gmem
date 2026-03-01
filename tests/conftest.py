@@ -3,35 +3,37 @@ Shared pytest fixtures for 0GMem tests.
 """
 
 import uuid
+from collections.abc import Callable
+from datetime import datetime
 
-import pytest
 import numpy as np
-from typing import Callable
-from datetime import datetime, timedelta
+import pytest
 
-from zerogmem import MemoryManager, Encoder, Retriever, MemoryConfig
+from zerogmem import Encoder, MemoryConfig, MemoryManager, Retriever
 from zerogmem.encoder.encoder import EncoderConfig
+from zerogmem.graph.entity import EntityGraph
+from zerogmem.graph.semantic import SemanticGraph
+from zerogmem.graph.temporal import TemporalGraph
+from zerogmem.graph.unified import UnifiedMemoryGraph
+from zerogmem.memory.episodic import Episode, EpisodeMessage, EpisodicMemory
+from zerogmem.memory.semantic import Fact, SemanticMemoryStore
 from zerogmem.memory.working import WorkingMemory, WorkingMemoryItem
-from zerogmem.memory.episodic import EpisodicMemory, Episode, EpisodeMessage
-from zerogmem.memory.semantic import SemanticMemoryStore, Fact
-from zerogmem.graph.entity import EntityGraph, EntityNode, EntityEdge, EntityType
-from zerogmem.graph.temporal import TemporalGraph, TemporalNode, TimeInterval
-from zerogmem.graph.semantic import SemanticGraph, SemanticNode, SemanticEdge
-from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
 from zerogmem.retriever.attention_filter import AttentionFilter, FilterConfig
-
 
 # ---------------------------------------------------------------------------
 # Core fixtures (existing)
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_embedding_fn() -> Callable[[str], np.ndarray]:
     """Create a mock embedding function for testing without API calls."""
+
     def embed(text: str) -> np.ndarray:
         # Create deterministic embeddings based on text hash
         np.random.seed(hash(text) % (2**32))
         return np.random.randn(1536).astype(np.float32)
+
     return embed
 
 
@@ -84,6 +86,7 @@ def retriever(populated_memory: MemoryManager, mock_embedding_fn) -> Retriever:
 # Working Memory fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def working_memory():
     """Small-capacity working memory for testing."""
@@ -93,6 +96,7 @@ def working_memory():
 @pytest.fixture
 def make_wm_item(mock_embedding_fn):
     """Factory to create WorkingMemoryItem instances."""
+
     def _make(content, item_id=None, attention=1.0):
         return WorkingMemoryItem(
             id=item_id or str(uuid.uuid4()),
@@ -100,12 +104,14 @@ def make_wm_item(mock_embedding_fn):
             embedding=mock_embedding_fn(content),
             attention_weight=attention,
         )
+
     return _make
 
 
 # ---------------------------------------------------------------------------
 # Episodic Memory fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def episodic_memory():
@@ -116,6 +122,7 @@ def episodic_memory():
 @pytest.fixture
 def make_episode(mock_embedding_fn):
     """Factory to create Episode instances."""
+
     def _make(
         participants=None,
         topics=None,
@@ -131,15 +138,17 @@ def make_episode(mock_embedding_fn):
             start_time=start_time or datetime(2024, 6, 15, 12, 0, 0),
             summary_embedding=mock_embedding_fn("episode summary"),
         )
-        for speaker, content in (messages or []):
+        for speaker, content in messages or []:
             ep.add_message(EpisodeMessage(speaker=speaker, content=content))
         return ep
+
     return _make
 
 
 # ---------------------------------------------------------------------------
 # Semantic Memory fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def semantic_store():
@@ -150,6 +159,7 @@ def semantic_store():
 @pytest.fixture
 def make_fact(mock_embedding_fn):
     """Factory to create Fact instances."""
+
     def _make(subject, predicate, obj, category="", negated=False, confidence=1.0):
         return Fact(
             content=f"{subject} {predicate} {obj}",
@@ -162,12 +172,14 @@ def make_fact(mock_embedding_fn):
             embedding=mock_embedding_fn(f"{subject} {predicate} {obj}"),
             sources=["test-source"],
         )
+
     return _make
 
 
 # ---------------------------------------------------------------------------
 # Graph fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def entity_graph():
@@ -196,6 +208,7 @@ def unified_graph():
 # ---------------------------------------------------------------------------
 # Encoder / Retriever component fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def encoder_with_mock(mock_embedding_fn):

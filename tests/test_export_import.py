@@ -3,12 +3,11 @@
 import json
 import zipfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from zerogmem import MemoryManager, MemoryConfig
+from zerogmem import MemoryConfig, MemoryManager
 from zerogmem.persistence import (
     EMBEDDINGS_FILENAME,
     EXPORT_FORMAT_VERSION,
@@ -19,10 +18,10 @@ from zerogmem.persistence import (
     save_memory_state,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_embed(text: str) -> np.ndarray:
     np.random.seed(hash(text) % (2**32))
@@ -45,6 +44,7 @@ def _populated_manager() -> MemoryManager:
 # ---------------------------------------------------------------------------
 # persistence.export_memory_archive tests
 # ---------------------------------------------------------------------------
+
 
 class TestExportMemoryArchive:
 
@@ -110,6 +110,7 @@ class TestExportMemoryArchive:
 # persistence.import_memory_archive tests
 # ---------------------------------------------------------------------------
 
+
 class TestImportMemoryArchive:
 
     def test_round_trip(self, tmp_path):
@@ -137,9 +138,7 @@ class TestImportMemoryArchive:
 
         assert restored is not None
         # Check that at least some memories have embeddings
-        has_embedding = any(
-            m.embedding is not None for m in restored.graph.memories.values()
-        )
+        has_embedding = any(m.embedding is not None for m in restored.graph.memories.values())
         assert has_embedding
 
     def test_invalid_zip(self, tmp_path):
@@ -210,6 +209,7 @@ class TestImportMemoryArchive:
 # MCP tool integration tests
 # ---------------------------------------------------------------------------
 
+
 class TestMCPExportImportTools:
 
     @pytest.mark.asyncio
@@ -243,10 +243,9 @@ class TestMCPExportImportTools:
 
     @pytest.mark.asyncio
     async def test_import_tool_restores_state(self, tmp_path):
-        from zerogmem import mcp_server, Encoder, Retriever
-        from zerogmem.mcp_server import OperationMetrics
+        from zerogmem import Encoder, Retriever, mcp_server
         from zerogmem.encoder.encoder import EncoderConfig
-        from zerogmem.retriever.retriever import RetrieverConfig
+        from zerogmem.mcp_server import OperationMetrics
         from zerogmem.persistence import export_memory_archive
 
         mm = _populated_manager()
@@ -299,9 +298,7 @@ class TestMCPExportImportTools:
         mcp_server._metrics = OperationMetrics()
 
         try:
-            result = await mcp_server.import_memory(
-                archive_path="/tmp/any.zip", merge=True
-            )
+            result = await mcp_server.import_memory(archive_path="/tmp/any.zip", merge=True)
             assert "not yet supported" in result
         finally:
             mcp_server._initialized = original_init

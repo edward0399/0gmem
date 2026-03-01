@@ -2,11 +2,9 @@
 
 from datetime import datetime
 
-import numpy as np
-
-from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
 from zerogmem.graph.entity import EntityNode, EntityType
 from zerogmem.graph.temporal import TimeInterval
+from zerogmem.graph.unified import UnifiedMemoryItem
 
 
 class TestUnifiedMemoryGraph:
@@ -124,11 +122,14 @@ class TestUnifiedMemoryGraph:
         stats = unified_graph.get_stats()
         assert stats["total_memories"] == 0
 
-        unified_graph.add_memory(self._make_memory(
-            "event", mock_embedding_fn,
-            event_time=TimeInterval(start=datetime(2024, 6, 1)),
-            concepts=["test"],
-        ))
+        unified_graph.add_memory(
+            self._make_memory(
+                "event",
+                mock_embedding_fn,
+                event_time=TimeInterval(start=datetime(2024, 6, 1)),
+                concepts=["test"],
+            )
+        )
         stats = unified_graph.get_stats()
         assert stats["total_memories"] == 1
         assert stats["temporal_nodes"] == 1

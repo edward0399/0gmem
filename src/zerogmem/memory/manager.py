@@ -8,33 +8,37 @@ and provides the main interface for the 0GMem system.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any
+
 import numpy as np
 
-from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
 from zerogmem.graph.entity import EntityNode, EntityType
 from zerogmem.graph.temporal import TimeInterval
+from zerogmem.graph.unified import UnifiedMemoryGraph, UnifiedMemoryItem
+from zerogmem.memory.episodic import Episode, EpisodeMessage, EpisodicMemory
+from zerogmem.memory.semantic import Fact, SemanticMemoryStore
 from zerogmem.memory.working import WorkingMemory, WorkingMemoryItem
-from zerogmem.memory.episodic import EpisodicMemory, Episode, EpisodeMessage
-from zerogmem.memory.semantic import SemanticMemoryStore, Fact
 
 
 @dataclass
 class Conversation:
     """Represents a conversation to be processed."""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     session_id: str = ""
-    messages: List[Dict[str, Any]] = field(default_factory=list)
-    participants: List[str] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    participants: list[str] = field(default_factory=list)
     start_time: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class MemoryConfig:
     """Configuration for memory manager."""
+
     working_memory_capacity: int = 20
     working_memory_decay_rate: float = 0.05
     embedding_dim: int = 1536
@@ -57,7 +61,7 @@ class MemoryManager:
     - Query routing and retrieval
     """
 
-    def __init__(self, config: Optional[MemoryConfig] = None):
+    def __init__(self, config: MemoryConfig | None = None):
         self.config = config or MemoryConfig()
 
         # Core components
@@ -70,17 +74,17 @@ class MemoryManager:
         self.semantic_memory = SemanticMemoryStore()
 
         # Session tracking
-        self.current_session_id: Optional[str] = None
-        self.current_episode: Optional[Episode] = None
+        self.current_session_id: str | None = None
+        self.current_episode: Episode | None = None
 
         # Embedding function (to be set by encoder)
-        self._embed_fn: Optional[callable] = None
+        self._embed_fn: Callable[[str], np.ndarray] | None = None
 
-    def set_embedding_function(self, embed_fn: callable) -> None:
+    def set_embedding_function(self, embed_fn: Callable[[str], np.ndarray]) -> None:
         """Set the embedding function for memory encoding."""
         self._embed_fn = embed_fn
 
-    def start_session(self, session_id: Optional[str] = None) -> str:
+    def start_session(self, session_id: str | None = None) -> str:
         """Start a new conversation session."""
         self.current_session_id = session_id or str(uuid.uuid4())
 
@@ -92,7 +96,7 @@ class MemoryManager:
 
         return self.current_session_id
 
-    def end_session(self) -> Optional[str]:
+    def end_session(self) -> str | None:
         """End the current session and finalize the episode."""
         if self.current_episode:
             self.current_episode.end_time = datetime.now()
@@ -106,9 +110,7 @@ class MemoryManager:
             self.episodic_memory.add_episode(self.current_episode)
 
             # Enforce capacity limits
-            removed_episodes = self.episodic_memory.enforce_capacity(
-                self.config.max_episodes
-            )
+            removed_episodes = self.episodic_memory.enforce_capacity(self.config.max_episodes)
             for _, session_id in removed_episodes:
                 if session_id:
                     self._cascade_remove_by_session(session_id)
@@ -129,8 +131,7 @@ class MemoryManager:
         from the unified graph.
         """
         to_remove = [
-            mid for mid, mem in self.graph.memories.items()
-            if mem.session_id == session_id
+            mid for mid, mem in self.graph.memories.items() if mem.session_id == session_id
         ]
         for mid in to_remove:
             self.graph.remove_memory(mid)
@@ -139,9 +140,9 @@ class MemoryManager:
         self,
         speaker: str,
         content: str,
-        timestamp: Optional[datetime] = None,
-        entities: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        timestamp: datetime | None = None,
+        entities: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Add a message to the current session.
@@ -196,8 +197,8 @@ class MemoryManager:
         self,
         name: str,
         entity_type: EntityType = EntityType.UNKNOWN,
-        attributes: Optional[Dict[str, Any]] = None,
-        aliases: Optional[List[str]] = None
+        attributes: dict[str, Any] | None = None,
+        aliases: list[str] | None = None,
     ) -> str:
         """Add or update an entity in the entity graph."""
         # Check if entity exists
@@ -229,7 +230,7 @@ class MemoryManager:
         relation: str,
         target_entity: str,
         negated: bool = False,
-        evidence_memory_id: Optional[str] = None
+        evidence_memory_id: str | None = None,
     ) -> str:
         """Add a relation between entities."""
         # Ensure entities exist
@@ -251,8 +252,8 @@ class MemoryManager:
         predicate: str,
         obj: str,
         category: str = "",
-        source_episode_id: Optional[str] = None,
-        negated: bool = False
+        source_episode_id: str | None = None,
+        negated: bool = False,
     ) -> str:
         """Add a fact to semantic memory."""
         embedding = self._embed_fn(f"{subject} {predicate} {obj}") if self._embed_fn else None
@@ -272,11 +273,7 @@ class MemoryManager:
         return fact_id
 
     def add_negative_fact(
-        self,
-        subject: str,
-        predicate: str,
-        obj: str,
-        source_episode_id: Optional[str] = None
+        self, subject: str, predicate: str, obj: str, source_episode_id: str | None = None
     ) -> str:
         """Add an explicit negation (what is NOT true)."""
         return self.semantic_memory.add_negation(
@@ -293,8 +290,8 @@ class MemoryManager:
         query_text: str,
         query_type: str = "auto",
         top_k: int = 10,
-        include_working_memory: bool = True
-    ) -> List[Dict[str, Any]]:
+        include_working_memory: bool = True,
+    ) -> list[dict[str, Any]]:
         """
         Main query interface for retrieving relevant memories.
 
@@ -316,67 +313,74 @@ class MemoryManager:
         if include_working_memory and query_embedding is not None:
             wm_items = self.working_memory.get_context(query_embedding, top_k=5)
             for item in wm_items:
-                results.append({
-                    "id": item.id,
-                    "content": item.content,
-                    "source": "working_memory",
-                    "score": item.attention_weight,
-                    "type": "working",
-                })
+                results.append(
+                    {
+                        "id": item.id,
+                        "content": item.content,
+                        "source": "working_memory",
+                        "score": item.attention_weight,
+                        "type": "working",
+                    }
+                )
 
         # Semantic search in unified graph
         if query_embedding is not None:
-            similar = self.graph.query_by_similarity(
-                query_embedding, top_k=top_k
-            )
+            similar = self.graph.query_by_similarity(query_embedding, top_k=top_k)
             for memory, score in similar:
-                results.append({
-                    "id": memory.id,
-                    "content": memory.content,
-                    "source": memory.source,
-                    "score": score,
-                    "type": "semantic",
-                    "entities": memory.entity_names,
-                    "timestamp": memory.event_time.start.isoformat() if memory.event_time else None,
-                })
+                results.append(
+                    {
+                        "id": memory.id,
+                        "content": memory.content,
+                        "source": memory.source,
+                        "score": score,
+                        "type": "semantic",
+                        "entities": memory.entity_names,
+                        "timestamp": (
+                            memory.event_time.start.isoformat() if memory.event_time else None
+                        ),
+                    }
+                )
 
         # Search episodic memory
         if query_embedding is not None:
-            episodes = self.episodic_memory.search_similar(
-                query_embedding, top_k=top_k // 2
-            )
+            episodes = self.episodic_memory.search_similar(query_embedding, top_k=top_k // 2)
             for episode, score in episodes:
-                results.append({
-                    "id": episode.id,
-                    "content": episode.summary or episode.get_full_text()[:500],
-                    "source": "episodic",
-                    "score": score,
-                    "type": "episode",
-                    "participants": episode.participant_names,
-                    "timestamp": episode.start_time.isoformat(),
-                })
+                results.append(
+                    {
+                        "id": episode.id,
+                        "content": episode.summary or episode.get_full_text()[:500],
+                        "source": "episodic",
+                        "score": score,
+                        "type": "episode",
+                        "participants": episode.participant_names,
+                        "timestamp": episode.start_time.isoformat(),
+                    }
+                )
 
         # Search semantic facts
         if query_embedding is not None:
-            facts = self.semantic_memory.search_similar(
-                query_embedding, top_k=top_k // 2
-            )
+            facts = self.semantic_memory.search_similar(query_embedding, top_k=top_k // 2)
             for fact, score in facts:
-                results.append({
-                    "id": fact.id,
-                    "content": fact.content,
-                    "source": "semantic_fact",
-                    "score": score * fact.confidence,  # Weight by confidence
-                    "type": "fact",
-                    "subject": fact.subject,
-                    "predicate": fact.predicate,
-                    "object": fact.object,
-                    "negated": fact.negated,
-                    "confidence": fact.confidence,
-                })
+                results.append(
+                    {
+                        "id": fact.id,
+                        "content": fact.content,
+                        "source": "semantic_fact",
+                        "score": score * fact.confidence,  # Weight by confidence
+                        "type": "fact",
+                        "subject": fact.subject,
+                        "predicate": fact.predicate,
+                        "object": fact.object,
+                        "negated": fact.negated,
+                        "confidence": fact.confidence,
+                    }
+                )
 
         # Sort by score and deduplicate
-        results.sort(key=lambda x: x["score"], reverse=True)
+        results.sort(
+            key=lambda x: float(x["score"]),  # type: ignore[arg-type]
+            reverse=True,
+        )
         seen_ids = set()
         unique_results = []
         for r in results:
@@ -389,9 +393,9 @@ class MemoryManager:
     def query_temporal(
         self,
         start_time: datetime,
-        end_time: Optional[datetime] = None,
-        entities: Optional[List[str]] = None
-    ) -> List[Dict[str, Any]]:
+        end_time: datetime | None = None,
+        entities: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """Query memories by time range."""
         memories = self.graph.query_by_time(start_time, end_time, entities)
 
@@ -406,7 +410,7 @@ class MemoryManager:
             for m in memories
         ]
 
-    def query_entity(self, entity_name: str) -> Dict[str, Any]:
+    def query_entity(self, entity_name: str) -> dict[str, Any]:
         """Get comprehensive information about an entity."""
         # Find entity
         entities = self.graph.entity_graph.find_by_name(entity_name)
@@ -448,22 +452,15 @@ class MemoryManager:
             ],
         }
 
-    def check_fact(
-        self,
-        subject: str,
-        predicate: str,
-        obj: str
-    ) -> Dict[str, Any]:
+    def check_fact(self, subject: str, predicate: str, obj: str) -> dict[str, Any]:
         """Check if a fact is true, false, or unknown."""
         # Check for explicit negation
-        is_negated, negation_fact = self.semantic_memory.check_negation(
-            subject, predicate, obj
-        )
+        is_negated, negation_fact = self.semantic_memory.check_negation(subject, predicate, obj)
 
         if is_negated:
             return {
                 "status": "negated",
-                "message": f"Explicitly stored as NOT true",
+                "message": "Explicitly stored as NOT true",
                 "confidence": 1.0,
                 "evidence": negation_fact.negation_source if negation_fact else None,
             }
@@ -488,9 +485,7 @@ class MemoryManager:
 
         if source_entities and target_entities:
             exists, is_neg = self.graph.entity_graph.has_relation(
-                source_entities[0].id,
-                target_entities[0].id,
-                predicate
+                source_entities[0].id, target_entities[0].id, predicate
             )
             if exists:
                 return {
@@ -507,7 +502,7 @@ class MemoryManager:
 
     # ==================== Consolidation ====================
 
-    def consolidate(self) -> Dict[str, int]:
+    def consolidate(self) -> dict[str, int]:
         """
         Perform memory consolidation.
 
@@ -537,7 +532,7 @@ class MemoryManager:
 
     # ==================== Statistics ====================
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get comprehensive statistics about the memory system."""
         ep_count = len(self.episodic_memory.episodes)
         fact_count = len(self.semantic_memory.facts)
@@ -550,16 +545,16 @@ class MemoryManager:
             "capacity": {
                 "max_episodes": self.config.max_episodes,
                 "max_facts": self.config.max_facts,
-                "episode_utilization": ep_count / self.config.max_episodes if self.config.max_episodes else 0,
-                "fact_utilization": fact_count / self.config.max_facts if self.config.max_facts else 0,
+                "episode_utilization": (
+                    ep_count / self.config.max_episodes if self.config.max_episodes else 0
+                ),
+                "fact_utilization": (
+                    fact_count / self.config.max_facts if self.config.max_facts else 0
+                ),
             },
         }
 
-    def get_context_for_response(
-        self,
-        query: str,
-        max_tokens: int = 4000
-    ) -> str:
+    def get_context_for_response(self, query: str, max_tokens: int = 4000) -> str:
         """
         Get formatted context string for LLM response generation.
 
@@ -587,18 +582,18 @@ class MemoryManager:
         # Reinforce key points at end
         parts.append("\n## Key Points")
         for r in results[:2]:
-            key_point = r['content'][:100]
+            key_point = r["content"][:100]
             parts.append(f"- {key_point}")
 
         context = "\n".join(parts)
 
         # Truncate if needed (rough estimate)
         if len(context) > max_tokens * 4:
-            context = context[:max_tokens * 4]
+            context = context[: max_tokens * 4]
 
         return context
 
-    def _episode_to_dict(self, ep: Episode) -> Dict[str, Any]:
+    def _episode_to_dict(self, ep: Episode) -> dict[str, Any]:
         """Serialize a single Episode to a dictionary."""
         return {
             "id": ep.id,
@@ -636,22 +631,24 @@ class MemoryManager:
 
     @staticmethod
     def _episode_from_dict(
-        ep_data: Dict[str, Any],
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
+        ep_data: dict[str, Any],
+        embeddings_map: dict[str, np.ndarray] | None = None,
     ) -> Episode:
         """Deserialize a single Episode from a dictionary."""
         embeddings_map = embeddings_map or {}
         messages = []
         for msg_data in ep_data.get("messages", []):
-            messages.append(EpisodeMessage(
-                id=msg_data.get("id", str(uuid.uuid4())),
-                speaker=msg_data.get("speaker", ""),
-                content=msg_data.get("content", ""),
-                timestamp=datetime.fromisoformat(msg_data["timestamp"]),
-                entities_mentioned=msg_data.get("entities_mentioned", []),
-                sentiment=msg_data.get("sentiment", 0.0),
-                metadata=msg_data.get("metadata", {}),
-            ))
+            messages.append(
+                EpisodeMessage(
+                    id=msg_data.get("id", str(uuid.uuid4())),
+                    speaker=msg_data.get("speaker", ""),
+                    content=msg_data.get("content", ""),
+                    timestamp=datetime.fromisoformat(msg_data["timestamp"]),
+                    entities_mentioned=msg_data.get("entities_mentioned", []),
+                    sentiment=msg_data.get("sentiment", 0.0),
+                    metadata=msg_data.get("metadata", {}),
+                )
+            )
         return Episode(
             id=ep_data["id"],
             summary=ep_data.get("summary", ""),
@@ -659,9 +656,7 @@ class MemoryManager:
             messages=messages,
             start_time=datetime.fromisoformat(ep_data["start_time"]),
             end_time=(
-                datetime.fromisoformat(ep_data["end_time"])
-                if ep_data.get("end_time")
-                else None
+                datetime.fromisoformat(ep_data["end_time"]) if ep_data.get("end_time") else None
             ),
             session_id=ep_data.get("session_id"),
             participants=ep_data.get("participants", []),
@@ -688,7 +683,7 @@ class MemoryManager:
             metadata=ep_data.get("metadata", {}),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize the entire memory system.
 
         Note: Working memory is ephemeral and NOT serialized.
@@ -720,10 +715,10 @@ class MemoryManager:
     @classmethod
     def from_dict(
         cls,
-        data: Dict[str, Any],
-        embedding_fn: Optional[callable] = None,
-        embeddings_map: Optional[Dict[str, np.ndarray]] = None,
-    ) -> "MemoryManager":
+        data: dict[str, Any],
+        embedding_fn: Callable[[str], np.ndarray] | None = None,
+        embeddings_map: dict[str, np.ndarray] | None = None,
+    ) -> MemoryManager:
         """Deserialize memory manager from dictionary.
 
         Args:
@@ -752,13 +747,9 @@ class MemoryManager:
 
         # Restore sub-components
         if "graph" in data:
-            manager.graph = UnifiedMemoryGraph.from_dict(
-                data["graph"], embeddings_map
-            )
+            manager.graph = UnifiedMemoryGraph.from_dict(data["graph"], embeddings_map)
         if "episodic" in data:
-            manager.episodic_memory = EpisodicMemory.from_dict(
-                data["episodic"], embeddings_map
-            )
+            manager.episodic_memory = EpisodicMemory.from_dict(data["episodic"], embeddings_map)
         if "semantic" in data:
             manager.semantic_memory = SemanticMemoryStore.from_dict(
                 data["semantic"], embeddings_map

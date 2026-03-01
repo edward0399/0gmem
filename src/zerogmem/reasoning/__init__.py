@@ -6,8 +6,16 @@ This module contains innovative approaches that go beyond EverMemOS:
 - Question Decomposition: Break complex questions into sub-questions
 """
 
-from zerogmem.reasoning.answer_verifier import AnswerVerifier, VerificationResult, ConsistencyChecker
-from zerogmem.reasoning.question_decomposer import QuestionDecomposer, ReasoningChainExecutor, SubQuestion
+from zerogmem.reasoning.answer_verifier import (
+    AnswerVerifier,
+    ConsistencyChecker,
+    VerificationResult,
+)
+from zerogmem.reasoning.question_decomposer import (
+    QuestionDecomposer,
+    ReasoningChainExecutor,
+    SubQuestion,
+)
 
 __all__ = [
     "AnswerVerifier",

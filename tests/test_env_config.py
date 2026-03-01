@@ -2,12 +2,10 @@
 
 import logging
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # _env_int helper
 # ---------------------------------------------------------------------------
+
 
 class TestEnvInt:
     """Tests for the _env_int helper function."""
@@ -15,16 +13,19 @@ class TestEnvInt:
     def test_returns_default_when_missing(self, monkeypatch):
         monkeypatch.delenv("ZEROGMEM_TEST_VAR", raising=False)
         from zerogmem.mcp_server import _env_int
+
         assert _env_int("ZEROGMEM_TEST_VAR", 42) == 42
 
     def test_reads_valid_integer(self, monkeypatch):
         monkeypatch.setenv("ZEROGMEM_TEST_VAR", "100")
         from zerogmem.mcp_server import _env_int
+
         assert _env_int("ZEROGMEM_TEST_VAR", 42) == 100
 
     def test_invalid_returns_default_with_warning(self, monkeypatch, caplog):
         monkeypatch.setenv("ZEROGMEM_TEST_VAR", "not_a_number")
         from zerogmem.mcp_server import _env_int
+
         with caplog.at_level(logging.WARNING, logger="0gmem-mcp"):
             result = _env_int("ZEROGMEM_TEST_VAR", 42)
         assert result == 42
@@ -33,17 +34,20 @@ class TestEnvInt:
     def test_reads_zero(self, monkeypatch):
         monkeypatch.setenv("ZEROGMEM_TEST_VAR", "0")
         from zerogmem.mcp_server import _env_int
+
         assert _env_int("ZEROGMEM_TEST_VAR", 42) == 0
 
     def test_reads_negative(self, monkeypatch):
         monkeypatch.setenv("ZEROGMEM_TEST_VAR", "-5")
         from zerogmem.mcp_server import _env_int
+
         assert _env_int("ZEROGMEM_TEST_VAR", 42) == -5
 
 
 # ---------------------------------------------------------------------------
 # _build_configs
 # ---------------------------------------------------------------------------
+
 
 class TestBuildConfigs:
     """Tests for the _build_configs factory function."""
@@ -60,6 +64,7 @@ class TestBuildConfigs:
             monkeypatch.delenv(var, raising=False)
 
         from zerogmem.mcp_server import _build_configs
+
         encoder_config, memory_config, retriever_config = _build_configs()
 
         assert encoder_config.embedding_model == "text-embedding-3-small"
@@ -76,6 +81,7 @@ class TestBuildConfigs:
         monkeypatch.setenv("ZEROGMEM_MAX_CONTEXT_TOKENS", "16000")
 
         from zerogmem.mcp_server import _build_configs
+
         encoder_config, memory_config, retriever_config = _build_configs()
 
         assert encoder_config.embedding_model == "text-embedding-3-large"
@@ -98,10 +104,11 @@ class TestBuildConfigs:
         monkeypatch.setenv("ZEROGMEM_MAX_EPISODES", "250")
 
         from zerogmem.mcp_server import _build_configs
+
         encoder_config, memory_config, retriever_config = _build_configs()
 
         assert memory_config.max_episodes == 250  # custom
-        assert memory_config.max_facts == 5000    # default
+        assert memory_config.max_facts == 5000  # default
         assert encoder_config.embedding_model == "text-embedding-3-small"  # default
         assert retriever_config.max_context_tokens == 8000  # default
 
@@ -118,6 +125,7 @@ class TestBuildConfigs:
         monkeypatch.setenv("ZEROGMEM_MAX_EPISODES", "abc")
 
         from zerogmem.mcp_server import _build_configs
+
         with caplog.at_level(logging.WARNING, logger="0gmem-mcp"):
             _, memory_config, _ = _build_configs()
 
