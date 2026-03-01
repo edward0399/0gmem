@@ -48,6 +48,43 @@ _autosave_interval = int(os.environ.get("ZEROGMEM_AUTOSAVE_INTERVAL", "5"))
 # Serializes all tool handler access to shared state
 _lock = asyncio.Lock()
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer from an environment variable with fallback."""
+    val = os.environ.get(name)
+    if val is None:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        logger.warning(f"Invalid integer for {name}={val!r}, using default {default}")
+        return default
+
+
+def _build_configs():
+    """Build config objects from environment variables.
+
+    Returns (encoder_config, memory_config, retriever_config).
+    """
+    from zerogmem.encoder.encoder import EncoderConfig
+    from zerogmem.memory.manager import MemoryConfig
+    from zerogmem.retriever.retriever import RetrieverConfig
+
+    encoder_config = EncoderConfig(
+        embedding_model=os.environ.get(
+            "ZEROGMEM_EMBEDDING_MODEL", "text-embedding-3-small"
+        ),
+    )
+    memory_config = MemoryConfig(
+        max_episodes=_env_int("ZEROGMEM_MAX_EPISODES", 500),
+        max_facts=_env_int("ZEROGMEM_MAX_FACTS", 5000),
+        working_memory_capacity=_env_int("ZEROGMEM_WORKING_MEMORY_CAPACITY", 20),
+    )
+    retriever_config = RetrieverConfig(
+        max_context_tokens=_env_int("ZEROGMEM_MAX_CONTEXT_TOKENS", 8000),
+    )
+    return encoder_config, memory_config, retriever_config
+
 # --- Input validation limits ---
 MAX_CONTENT_LENGTH = 50_000
 MAX_SPEAKER_LENGTH = 200
@@ -111,8 +148,10 @@ def _initialize_memory():
         from zerogmem import MemoryManager, Encoder, Retriever
         from zerogmem.persistence import load_memory_state
 
+        encoder_config, memory_config, retriever_config = _build_configs()
+
         # Initialize encoder first (needed for both fresh and restored)
-        _encoder = Encoder()
+        _encoder = Encoder(config=encoder_config)
 
         # Try to load existing memory state
         memory_dir = _get_memory_dir()
@@ -122,11 +161,14 @@ def _initialize_memory():
             _memory_manager = restored
             logger.info("Restored memory state from disk")
         else:
-            _memory_manager = MemoryManager()
+            _memory_manager = MemoryManager(config=memory_config)
             _memory_manager.set_embedding_function(_encoder.get_embedding)
             logger.info("Starting with fresh memory state")
 
-        _retriever = Retriever(_memory_manager, embedding_fn=_encoder.get_embedding)
+        _retriever = Retriever(
+            _memory_manager, embedding_fn=_encoder.get_embedding,
+            config=retriever_config,
+        )
 
         # Register atexit handler to save state on shutdown
         atexit.register(_save_state)
@@ -509,13 +551,18 @@ async def clear_all_memories() -> str:
         try:
             global _memory_manager, _encoder, _retriever, _initialized
 
-            # Reset the memory system
+            # Reset the memory system with env-var configs
             from zerogmem import MemoryManager, Encoder, Retriever
 
-            _memory_manager = MemoryManager()
-            _encoder = Encoder()
+            encoder_config, memory_config, retriever_config = _build_configs()
+
+            _encoder = Encoder(config=encoder_config)
+            _memory_manager = MemoryManager(config=memory_config)
             _memory_manager.set_embedding_function(_encoder.get_embedding)
-            _retriever = Retriever(_memory_manager, embedding_fn=_encoder.get_embedding)
+            _retriever = Retriever(
+                _memory_manager, embedding_fn=_encoder.get_embedding,
+                config=retriever_config,
+            )
 
             # Clear any persisted state files
             memory_dir = _get_memory_dir()

@@ -105,6 +105,22 @@ Claude: [calls search_memories_by_time("yesterday")]
 
 ## Configuration
 
+### Environment Variables
+
+All settings can be configured via environment variables:
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ZEROGMEM_DATA_DIR` | str | `~/.0gmem` | Directory for persistent memory storage |
+| `ZEROGMEM_AUTOSAVE_INTERVAL` | int | `5` | Auto-save after every N store operations |
+| `ZEROGMEM_MAX_EPISODES` | int | `500` | Maximum number of episodic memory episodes |
+| `ZEROGMEM_MAX_FACTS` | int | `5000` | Maximum number of semantic memory facts |
+| `ZEROGMEM_WORKING_MEMORY_CAPACITY` | int | `20` | Working memory capacity (recent items kept active) |
+| `ZEROGMEM_EMBEDDING_MODEL` | str | `text-embedding-3-small` | OpenAI embedding model to use |
+| `ZEROGMEM_MAX_CONTEXT_TOKENS` | int | `8000` | Maximum tokens in retrieved context |
+
+> **Note:** When loading saved memory state from disk, the capacity settings (`max_episodes`, `max_facts`, `working_memory_capacity`) from the saved state take precedence over environment variables. Environment variable values are used for fresh starts only.
+
 ### Data Directory
 
 By default, memories are stored in `~/.0gmem/`. Override with:
@@ -125,7 +141,9 @@ For team sharing, create `.mcp.json` in your project:
       "command": "python",
       "args": ["-m", "zerogmem.mcp_server"],
       "env": {
-        "ZEROGMEM_DATA_DIR": "./.0gmem"
+        "ZEROGMEM_DATA_DIR": "./.0gmem",
+        "ZEROGMEM_MAX_EPISODES": "1000",
+        "ZEROGMEM_EMBEDDING_MODEL": "text-embedding-3-large"
       }
     }
   }
