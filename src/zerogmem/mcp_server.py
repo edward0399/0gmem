@@ -950,7 +950,24 @@ async def import_memory(archive_path: str, merge: bool = False) -> str:
 
 def main() -> None:
     """Run the MCP server."""
-    logger.info("Starting 0GMem MCP server...")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="0GMem MCP server")
+    parser.add_argument(
+        "--data-dir",
+        help="Directory for memory storage (default: ~/.0gmem). "
+        "Use different directories to isolate memory across sessions.",
+    )
+    args = parser.parse_args()
+
+    if args.data_dir:
+        global _memory_dir
+        _memory_dir = Path(args.data_dir).expanduser().resolve()
+        _memory_dir.mkdir(parents=True, exist_ok=True)
+        # Also set env var so _ingest_pending and any child code sees it
+        os.environ["ZEROGMEM_DATA_DIR"] = str(_memory_dir)
+
+    logger.info(f"Starting 0GMem MCP server (data_dir={_get_memory_dir()})...")
     mcp.run(transport="stdio")
 
 

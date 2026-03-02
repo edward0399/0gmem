@@ -126,10 +126,45 @@ All settings can be configured via environment variables:
 
 ### Data Directory
 
-By default, memories are stored in `~/.0gmem/`. Override with:
+By default, memories are stored in `~/.0gmem/`. Override with the `--data-dir` flag or the `ZEROGMEM_DATA_DIR` environment variable:
 
 ```bash
+# Using --data-dir flag (recommended)
+claude mcp add --transport stdio 0gmem -- python -m zerogmem.mcp_server --data-dir /path/to/data
+
+# Using environment variable
 claude mcp add --transport stdio --env ZEROGMEM_DATA_DIR=/path/to/data 0gmem -- python -m zerogmem.mcp_server
+```
+
+### Session Isolation
+
+By default, all Claude Code sessions share the same memory stored in `~/.0gmem/`. Each session spawns its own MCP server process, but they read/write the same directory on disk.
+
+To **isolate memory per session or project**, use a different `--data-dir` for each:
+
+```bash
+# Project A — uses its own memory
+claude mcp add --transport stdio 0gmem -- python -m zerogmem.mcp_server --data-dir ~/.0gmem-project-a
+
+# Project B — completely separate memory
+claude mcp add --transport stdio 0gmem -- python -m zerogmem.mcp_server --data-dir ~/.0gmem-project-b
+```
+
+If you use the [auto-hook](#auto-hook-optional) for automatic retrieval, update the hook command to use the same data directory:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "matcher": "",
+      "hooks": [{
+        "type": "command",
+        "command": "ZEROGMEM_DATA_DIR=~/.0gmem-project-a python3 .claude/hooks/0gmem_hook.py",
+        "timeout": 10
+      }]
+    }]
+  }
+}
 ```
 
 ### Project-Scoped Configuration
@@ -142,9 +177,8 @@ For team sharing, create `.mcp.json` in your project:
     "0gmem": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "zerogmem.mcp_server"],
+      "args": ["-m", "zerogmem.mcp_server", "--data-dir", "./.0gmem"],
       "env": {
-        "ZEROGMEM_DATA_DIR": "./.0gmem",
         "ZEROGMEM_MAX_EPISODES": "1000",
         "ZEROGMEM_EMBEDDING_MODEL": "text-embedding-3-large"
       }
