@@ -91,7 +91,7 @@ class EmbeddingRegistry:
         fd, tmp_path = tempfile.mkstemp(dir=path, suffix=".npz")
         try:
             os.close(fd)
-            np.savez_compressed(tmp_path, **self._store)
+            np.savez_compressed(tmp_path, **self._store)  # type: ignore[arg-type,unused-ignore]
             os.replace(tmp_path, npz_path)
         except BaseException:
             # Clean up temp file on any failure
